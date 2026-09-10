@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
-import { ClauseTag, ErrorBanner, Loading, Stat, VerdictBadge } from "../components/common";
+import { ClauseTag, EmptyState, ErrorBanner, Loading, Stat, VerdictBadge } from "../components/common";
+import { IconShieldCheck } from "../components/icons";
 import { useI18n } from "../i18n";
 import type { Stats, WorklistItem } from "../types";
 
@@ -31,42 +32,57 @@ export default function Worklist() {
   return (
     <>
       <div className="page-head">
-        <h1>{t("worklist.title")}</h1>
-        <p>{t("worklist.subtitle")}</p>
+        <div className="page-head-text">
+          <h1>{t("compliance.title")}</h1>
+          <p>{t("compliance.subtitle")}</p>
+        </div>
+        <div className="page-head-actions">
+          <Link to="/rules" className="btn btn-sm">
+            {t("compliance.viewRules")}
+          </Link>
+        </div>
       </div>
 
       <div className="stat-row" style={{ marginBottom: 16 }}>
-        <Stat value={stats.total_scans} label="Inspections" />
+        <Stat accent="brand" value={stats.total_scans} label="Inspections" />
         <Stat value={stats.entities_tracked} label="Entities tracked" />
-        <Stat value={stats.total_violations} label="Findings" />
-        <Stat value={stats.verdicts.REVIEW ?? 0} label="For action" />
+        <Stat accent="critical" value={stats.total_violations} label="Findings" />
+        <Stat accent="critical" value={stats.verdicts.REVIEW ?? 0} label="For action" />
+      </div>
+
+      <div className="banner banner-info" style={{ marginBottom: 16 }}>
+        A confirmed finding only counts toward an entity's risk score and repeat-offender
+        pattern once its correction-notice or formal-case response window has closed
+        without a fix — escalated or closed unresolved. A finding still within that
+        window is held back, shown as "within response window" below, not silently
+        dropped.
       </div>
 
       <div className="card">
         <div className="card-head">
-          <h2>{t("worklist.entity")}</h2>
+          <h2>{t("compliance.entity")}</h2>
           <span className="muted">{items.length}</span>
         </div>
 
         {items.length === 0 ? (
-          <div className="empty">{t("worklist.empty")}</div>
+          <EmptyState icon={<IconShieldCheck size={18} />} title={t("compliance.empty")} />
         ) : (
           <div className="table-scroll">
             <table>
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>{t("worklist.entity")}</th>
-                  <th>{t("worklist.risk")}</th>
-                  <th>{t("worklist.scans")}</th>
-                  <th>{t("worklist.violations")}</th>
-                  <th>{t("worklist.clauses")}</th>
+                  <th>{t("compliance.entity")}</th>
+                  <th>{t("compliance.risk")}</th>
+                  <th>{t("compliance.scans")}</th>
+                  <th>{t("compliance.violations")}</th>
+                  <th>{t("compliance.clauses")}</th>
                   <th>Latest</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((item, index) => (
-                  <tr key={item.entity.id}>
+                  <tr key={item.entity.id} className="clickable">
                     <td className="muted">{index + 1}</td>
                     <td>
                       <Link to={`/entities/${item.entity.id}`}>
@@ -74,7 +90,7 @@ export default function Worklist() {
                       </Link>
                       {item.repeat_offender && (
                         <span className="tag tag-high" style={{ marginLeft: 7 }}>
-                          {t("worklist.repeat")}
+                          {t("compliance.repeat")}
                         </span>
                       )}
                       {item.entity.address && (
@@ -96,6 +112,11 @@ export default function Worklist() {
                         <span className="tag tag-high" style={{ marginLeft: 6 }}>
                           {item.high_severity_count} high
                         </span>
+                      )}
+                      {item.pending_response_count > 0 && (
+                        <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>
+                          +{item.pending_response_count} within response window
+                        </div>
                       )}
                     </td>
                     <td>
@@ -119,7 +140,7 @@ export default function Worklist() {
       {stats.top_clauses.length > 0 && (
         <div className="card" style={{ marginTop: 16 }}>
           <div className="card-head">
-            <h2>Most-breached clauses across all inspections</h2>
+            <h2>{t("compliance.clausesAll")}</h2>
           </div>
           <div className="card-pad stack" style={{ gap: 9 }}>
             {stats.top_clauses.map((clause) => (
@@ -131,7 +152,7 @@ export default function Worklist() {
                   <span
                     style={{
                       width: `${(clause.count / stats.top_clauses[0].count) * 100}%`,
-                      background: "var(--accent)",
+                      background: "var(--brand)",
                     }}
                   />
                 </div>

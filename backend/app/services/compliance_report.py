@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import Entity, Scan
-from app.services import evidence_chain, risk_scoring
+from app.services import case_engine, evidence_chain, risk_scoring
 
 
 def period_bounds(year: int, month: int) -> tuple[datetime, datetime]:
@@ -25,12 +25,15 @@ def period_bounds(year: int, month: int) -> tuple[datetime, datetime]:
 
 
 def build_report(db: Session, year: int, month: int) -> dict:
+    case_engine.escalate_overdue(db)
     start, end = period_bounds(year, month)
 
     scans = (
         db.execute(
             select(Scan)
-            .options(selectinload(Scan.violations), selectinload(Scan.entity))
+            .options(
+                selectinload(Scan.violations), selectinload(Scan.entity), selectinload(Scan.case)
+            )
             .where(Scan.captured_at >= start, Scan.captured_at <= end)
             .order_by(Scan.captured_at)
         )
@@ -43,13 +46,20 @@ def build_report(db: Session, year: int, month: int) -> dict:
     officer_counts: dict[str, int] = {}
     entity_findings: dict[str, int] = {}
     rule_versions: dict[str, int] = {}
+    pending_response = 0
 
     for scan in scans:
         verdicts[scan.verdict] = verdicts.get(scan.verdict, 0) + 1
         officer_counts[scan.officer_name] = officer_counts.get(scan.officer_name, 0) + 1
         rule_versions[scan.rule_version] = rule_versions.get(scan.rule_version, 0) + 1
 
-        for violation in scan.violations:
+        if scan.case and scan.case.status == "open" and scan.violations:
+            pending_response += 1
+
+        # A finding only enters the formal count once its case has closed one way or
+        # another (escalated or closed unresolved) — one still within its response
+        # window is reported separately, under pending_response, not folded in here.
+        for violation in case_engine.counted_violations(scan):
             record = clause_counts.setdefault(
                 violation.clause, {"clause": violation.clause, "title": violation.title, "count": 0}
             )
@@ -98,6 +108,7 @@ def build_report(db: Session, year: int, month: int) -> dict:
             "non_compliance_rate": round(non_compliant / len(scans), 3) if scans else 0.0,
             "findings": total_findings,
             "entities_with_findings": len(entity_findings),
+            "pending_response": pending_response,
         },
         "verdicts": verdicts,
         "rule_versions_applied": rule_versions,
@@ -112,8 +123,13 @@ def build_report(db: Session, year: int, month: int) -> dict:
         "evidence_integrity": evidence_chain.verify_chain(db),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "note": (
-            "Figures are drawn from inspections committed to the evidence ledger. The "
-            "integrity status above reports whether those records still verify against "
-            "the hashes recorded at inspection time."
+            "Findings, clause and priority-entity figures are drawn from cases that have "
+            "closed one way or another (escalated, or closed unresolved) — a confirmed "
+            "finding still within its correction-notice or formal-case response window is "
+            "counted separately, under pending_response, until the seller has had their "
+            "chance to correct it. Verdicts and rule-version figures cover every inspection "
+            "in the period regardless of case status. Evidence integrity below reports "
+            "whether the underlying records still verify against the hashes recorded at "
+            "inspection time."
         ),
     }

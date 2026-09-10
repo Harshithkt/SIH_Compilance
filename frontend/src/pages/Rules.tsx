@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { ClauseTag, ErrorBanner, Loading, SeverityTag } from "../components/common";
 import { fieldLabel, useI18n } from "../i18n";
@@ -6,6 +7,8 @@ import type { Rule, RuleVersionSummary } from "../types";
 
 export default function Rules() {
   const { t, lang } = useI18n();
+  const [params] = useSearchParams();
+  const requestedVersion = params.get("version");
   const [versions, setVersions] = useState<RuleVersionSummary[] | null>(null);
   const [activeVersion, setActiveVersion] = useState<string>("");
   const [selected, setSelected] = useState<string>("");
@@ -18,9 +21,13 @@ export default function Rules() {
       .then((response) => {
         setVersions(response.versions);
         setActiveVersion(response.active_version);
-        setSelected(response.active_version);
+        const preselect = response.versions.some((v) => v.version === requestedVersion)
+          ? requestedVersion!
+          : response.active_version;
+        setSelected(preselect);
       })
       .catch((e) => setError(e.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -40,8 +47,10 @@ export default function Rules() {
   return (
     <>
       <div className="page-head">
-        <h1>{t("rules.title")}</h1>
-        <p>{t("rules.subtitle")}</p>
+        <div className="page-head-text">
+          <h1>{t("rules.title")}</h1>
+          <p>{t("rules.subtitle")}</p>
+        </div>
       </div>
 
       <div className="stack">
@@ -123,6 +132,11 @@ export default function Rules() {
                           <div className="muted" style={{ marginTop: 3, fontSize: 12 }}>
                             Applies only when: {fieldLabel(rule.applies_if.field, lang)} ={" "}
                             {String(rule.applies_if.equals)}
+                          </div>
+                        )}
+                        {typeof rule.params?.reference === "string" && (
+                          <div className="banner banner-info" style={{ marginTop: 6, fontSize: 11.5 }}>
+                            {rule.params.reference}
                           </div>
                         )}
                       </td>

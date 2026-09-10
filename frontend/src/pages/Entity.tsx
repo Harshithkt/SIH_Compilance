@@ -31,28 +31,32 @@ export default function Entity() {
 
   return (
     <>
+      <p className="crumb">
+        <Link to="/compliance">{t("nav.compliance")}</Link>
+      </p>
       <div className="page-head">
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <div>
-            <h1>{entity.name}</h1>
-            <p>
-              <Link to="/worklist">{t("nav.worklist")}</Link>
-              {entity.address ? ` · ${entity.address}` : ""}
-            </p>
-          </div>
+        <div className="page-head-text">
+          <h1>{entity.name}</h1>
+          {entity.address && <p>{entity.address}</p>}
+        </div>
+        <div className="page-head-actions">
           {detail.repeat_offender && (
             <span className="tag tag-high" style={{ fontSize: 12, padding: "5px 10px" }}>
-              {t("worklist.repeat")}
+              {t("compliance.repeat")}
             </span>
           )}
+          <Link to={`/inspections?entity=${entity.id}`} className="btn btn-sm">
+            {t("compliance.scans")}
+          </Link>
         </div>
       </div>
 
       <div className="stat-row" style={{ marginBottom: 16 }}>
-        <Stat value={detail.risk_score} label={t("worklist.risk")} />
-        <Stat value={detail.scan_count} label={t("worklist.scans")} />
-        <Stat value={detail.violation_count} label={t("worklist.violations")} />
-        <Stat value={detail.high_severity_count} label="High severity" />
+        <Stat accent="brand" value={detail.risk_score} label={t("compliance.risk")} />
+        <Stat value={detail.scan_count} label={t("compliance.scans")} />
+        <Stat accent="critical" value={detail.violation_count} label={t("compliance.violations")} />
+        <Stat accent="critical" value={detail.high_severity_count} label="High severity" />
+        <Stat accent="warning" value={detail.pending_response_count} label="Within response window" />
       </div>
 
       <div className="split">
@@ -66,16 +70,16 @@ export default function Entity() {
               <thead>
                 <tr>
                   <th>Commodity</th>
-                  <th>Verdict</th>
+                  <th>Status</th>
                   <th>Rules applied</th>
                   <th>Captured</th>
                 </tr>
               </thead>
               <tbody>
                 {detail.scans.map((scan) => (
-                  <tr key={scan.id}>
+                  <tr key={scan.id} className="clickable">
                     <td>
-                      <Link to={`/scans/${scan.id}`}>
+                      <Link to={`/inspections/${scan.id}`}>
                         <strong>{scan.product_name ?? scan.id.slice(0, 8)}</strong>
                       </Link>
                     </td>
@@ -94,7 +98,7 @@ export default function Entity() {
         <div className="stack">
           <div className="card">
             <div className="card-head">
-              <h2>{t("worklist.clauses")}</h2>
+              <h2>{t("compliance.clauses")}</h2>
             </div>
             <div className="card-pad stack" style={{ gap: 9 }}>
               {detail.top_clauses.length === 0 ? (

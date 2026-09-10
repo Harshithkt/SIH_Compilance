@@ -1,7 +1,17 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
-import { ErrorBanner, Loading, VerdictBadge, formatDateTime, shortHash } from "../components/common";
+import {
+  EmptyState,
+  ErrorBanner,
+  Loading,
+  Timeline,
+  TimelineItem,
+  VerdictBadge,
+  formatDateTime,
+  shortHash,
+} from "../components/common";
+import { IconCheckCircle, IconLock } from "../components/icons";
 import { useI18n } from "../i18n";
 import type { ChainVerification, LedgerRow } from "../types";
 
@@ -36,88 +46,81 @@ export default function Ledger() {
   return (
     <>
       <div className="page-head">
-        <h1>{t("ledger.title")}</h1>
-        <p>{t("ledger.subtitle")}</p>
+        <div className="page-head-text">
+          <h1>{t("evidence.title")}</h1>
+          <p>{t("evidence.subtitle")}</p>
+        </div>
+        <div className="page-head-actions">
+          <button className="btn btn-primary" onClick={verify} disabled={verifying}>
+            <IconLock size={15} />
+            {verifying ? t("evidence.verifying") : t("evidence.verify")}
+          </button>
+        </div>
       </div>
+
+      {verification && (
+        <div
+          className={`banner ${verification.valid ? "banner-ok" : "banner-bad"}`}
+          style={{ marginBottom: 16 }}
+        >
+          <strong>
+            {verification.valid ? "Chain intact" : `Chain broken at entry #${verification.broken_at_sequence}`}
+          </strong>
+          <div style={{ marginTop: 4 }}>{verification.detail}</div>
+        </div>
+      )}
 
       <div className="card">
         <div className="card-head">
           <h2>
             {rows.length} {rows.length === 1 ? "entry" : "entries"}
           </h2>
-          <button className="btn btn-primary btn-sm" onClick={verify} disabled={verifying}>
-            {verifying ? t("ledger.verifying") : t("ledger.verify")}
-          </button>
         </div>
 
-        {verification && (
-          <div style={{ padding: "12px 18px 0" }}>
-            <div className={`banner ${verification.valid ? "banner-ok" : "banner-bad"}`}>
-              <strong>
-                {verification.valid ? "Chain intact" : `Chain broken at entry #${verification.broken_at_sequence}`}
-              </strong>
-              <div style={{ marginTop: 4 }}>{verification.detail}</div>
-            </div>
-          </div>
-        )}
-
         {rows.length === 0 ? (
-          <div className="empty">No entries yet.</div>
+          <EmptyState icon={<IconLock size={18} />} title={t("evidence.empty")} />
         ) : (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t("ledger.entry")}</th>
-                  <th>{t("ledger.scan")}</th>
-                  <th>Officer</th>
-                  <th>Verdict</th>
-                  <th>Links to</th>
-                  <th>{t("ledger.hash")}</th>
-                  <th>Committed</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr
-                    key={row.sequence}
-                    className={
-                      verification && !verification.valid && verification.broken_at_sequence === row.sequence
-                        ? "broken"
-                        : undefined
-                    }
-                    style={
-                      verification && !verification.valid && verification.broken_at_sequence === row.sequence
-                        ? { background: "var(--review-soft)" }
-                        : undefined
-                    }
-                  >
-                    <td>
+          <Timeline>
+            {rows.map((row, index) => {
+              const broken =
+                !!verification && !verification.valid && verification.broken_at_sequence === row.sequence;
+              return (
+                <TimelineItem key={row.sequence} last={index === rows.length - 1} bad={broken}>
+                  <div className="row" style={{ justifyContent: "space-between" }}>
+                    <div className="row" style={{ gap: 10 }}>
                       <strong>#{row.sequence}</strong>
-                    </td>
-                    <td>
-                      <Link to={`/scans/${row.scan_id}`} className="mono">
-                        {row.scan_id.slice(0, 8)}
-                      </Link>
-                    </td>
-                    <td>{row.officer_name}</td>
-                    <td>{row.verdict && <VerdictBadge verdict={row.verdict} />}</td>
-                    <td className="mono muted">{shortHash(row.prev_hash, 8)}</td>
-                    <td className="mono">{shortHash(row.entry_hash, 8)}</td>
-                    <td className="muted">{formatDateTime(row.created_at, lang)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      {row.verdict && <VerdictBadge verdict={row.verdict} />}
+                      {broken && <span className="tag tag-high">Chain break</span>}
+                    </div>
+                    <span className="muted" style={{ fontSize: 12 }}>
+                      {formatDateTime(row.created_at, lang)}
+                    </span>
+                  </div>
+                  <div className="row" style={{ marginTop: 6, fontSize: 12.5 }}>
+                    <Link to={`/inspections/${row.scan_id}`}>
+                      {t("evidence.scan")} {row.scan_id.slice(0, 8)}
+                    </Link>
+                    <span className="muted">· {row.officer_name}</span>
+                  </div>
+                  <div className="chain-link" style={{ marginTop: 6 }}>
+                    <span className="muted">prev</span>
+                    <span className="mono muted">{shortHash(row.prev_hash, 8)}</span>
+                    <span className="muted">→</span>
+                    <span className="muted">{t("evidence.hash").toLowerCase()}</span>
+                    <span className="mono">{shortHash(row.entry_hash, 8)}</span>
+                  </div>
+                </TimelineItem>
+              );
+            })}
+          </Timeline>
         )}
       </div>
 
-      <div className="banner banner-info" style={{ marginTop: 16 }}>
-        <strong>How to test this:</strong> edit any stored evidence photograph in{" "}
-        <code>backend/storage/images/</code>, or change a committed verdict directly in the
-        database, then run verification again. The chain reports the exact entry at which the
-        record no longer matches what was committed at inspection time.
+      <div className="banner banner-info row" style={{ marginTop: 16, gap: 8 }}>
+        <IconCheckCircle size={16} />
+        <span>
+          <strong>{t("evidence.howToTest")}:</strong> {t("evidence.howToTestBody")}
+        </span>
       </div>
     </>
   );

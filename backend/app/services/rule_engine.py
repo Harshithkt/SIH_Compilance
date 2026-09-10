@@ -114,6 +114,34 @@ def _check_min_height(decl: Declaration | None, params: dict) -> bool | None:
     return decl.bbox["h"] >= params["min_height_ratio"]
 
 
+def _check_min_height_table1(
+    decl: Declaration | None, params: dict, net_quantity_decl: Declaration | None
+) -> bool | None:
+    """Table I of the Second Schedule bands the minimum numeral height by pack size —
+    1mm up to 200 g/ml, 2mm from 200 to 500, 4mm above — not one flat figure for every
+    pack. This check honours that shape without claiming a millimetre measurement it
+    cannot make: `params['base_ratio_per_mm']` is a label-height ratio calibrated for a
+    1mm requirement (see the rule's own `reference` note for how, and its stated
+    uncertainty), and the actual threshold scales up with the band the declared net
+    quantity falls into, using app.services.quantity's Table I bands. A quantity that
+    cannot be parsed falls back to the smallest (1mm) band rather than skipping the
+    check, since that is the more conservative reading.
+
+    Still returns None — 'could not be measured', never charged as a contravention —
+    exactly where `_check_min_height` does: no bbox means no measurement.
+    """
+    if not decl or not decl.bbox or "h" not in decl.bbox:
+        return None
+
+    quantity = qty.parse(net_quantity_decl.value if net_quantity_decl else None)
+    required_mm = qty.minimum_numeral_height_mm(quantity) if quantity else None
+    if required_mm is None:
+        required_mm = 1.0
+
+    threshold = params["base_ratio_per_mm"] * required_mm
+    return decl.bbox["h"] >= threshold
+
+
 def evaluate(
     rule_pack: RulePack,
     declarations: dict[str, Declaration],
@@ -144,6 +172,10 @@ def evaluate(
             if not decl or not decl.present:
                 continue
             passed = _check_min_height(decl, rule["params"])
+        elif check_type == "numeral_height_table1":
+            if not decl or not decl.present:
+                continue
+            passed = _check_min_height_table1(decl, rule["params"], declarations.get("net_quantity"))
         elif check_type == "numeric_ratio":
             # Best-effort sanity check only; never blocks a GO verdict on its own.
             passed = True

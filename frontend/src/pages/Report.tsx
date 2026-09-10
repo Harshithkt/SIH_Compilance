@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { ClauseTag, ErrorBanner, Loading, Stat } from "../components/common";
+import { IconDownload, IconPrinter } from "../components/icons";
 import { useI18n } from "../i18n";
 import type { MonthlyReport } from "../types";
 
@@ -38,11 +39,22 @@ export default function Report() {
   return (
     <>
       <div className="page-head">
-        <h1>{t("report.title")}</h1>
-        <p>{t("report.subtitle")}</p>
+        <div className="page-head-text">
+          <h1>{t("report.title")}</h1>
+          <p>{t("report.subtitle")}</p>
+        </div>
       </div>
 
-      <div className="card" style={{ marginBottom: 16 }}>
+      <div className="print-only" style={{ marginBottom: 16 }}>
+        <strong style={{ fontSize: 16 }}>LabelLens — Legal Metrology enforcement</strong>
+        {report && (
+          <div className="muted" style={{ fontSize: 12 }}>
+            {report.period.label} · generated {new Date(report.generated_at).toLocaleString("en-IN")}
+          </div>
+        )}
+      </div>
+
+      <div className="card no-print" style={{ marginBottom: 16 }}>
         <div className="card-head">
           <div className="row">
             <select
@@ -69,14 +81,21 @@ export default function Report() {
             </select>
           </div>
           {report && (
-            <a
-              className="btn btn-sm"
-              href={api.monthlyReportUrl(year, month)}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t("report.raw")}
-            </a>
+            <div className="row">
+              <button className="btn btn-sm" onClick={() => window.print()}>
+                <IconPrinter size={14} />
+                {t("report.print")}
+              </button>
+              <a
+                className="btn btn-sm"
+                href={api.monthlyReportUrl(year, month)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <IconDownload size={14} />
+                {t("report.raw")}
+              </a>
+            </div>
           )}
         </div>
       </div>
@@ -92,8 +111,9 @@ export default function Report() {
               value={`${Math.round(report.totals.non_compliance_rate * 100)}%`}
               label={t("report.rate")}
             />
-            <Stat value={report.totals.findings} label={t("worklist.violations")} />
+            <Stat value={report.totals.findings} label={t("compliance.violations")} />
             <Stat value={report.totals.entities_with_findings} label={t("report.entities")} />
+            <Stat value={report.totals.pending_response} label="Within response window" />
           </div>
 
           <div

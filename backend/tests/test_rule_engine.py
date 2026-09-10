@@ -118,6 +118,28 @@ def test_absent_declaration_is_reported_once_not_also_as_undersized_print():
     assert not any(n["rule_id"] == "R7-numeral-height-mrp" for n in verdict.not_assessed)
 
 
+def test_numeral_height_scales_with_table1_band():
+    """A 200 g pack and a 600 g pack are held to different minimum numeral heights
+    (Table I: 1mm up to 200 g/ml, 4mm above 500) — the same label-height ratio that
+    clears the small-pack band must not automatically clear the large-pack one."""
+    small_pack = evaluate(
+        PACK, build({**COMPLIANT, "net_quantity": "200 g"}, height_ratio=0.03),
+        {"is_food_item": True, "is_imported": False},
+    )
+    large_pack = evaluate(
+        PACK, build({**COMPLIANT, "net_quantity": "600 g"}, height_ratio=0.03),
+        {"is_food_item": True, "is_imported": False},
+    )
+    assert not any(v["rule_id"] == "R7-numeral-height-mrp" for v in small_pack.violations)
+    assert any(v["rule_id"] == "R7-numeral-height-mrp" for v in large_pack.violations)
+
+
+def test_numeral_height_falls_back_to_smallest_band_when_quantity_unreadable():
+    values = {k: v for k, v in COMPLIANT.items() if k != "net_quantity"}
+    verdict = evaluate(PACK, build(values, height_ratio=0.03), {"is_food_item": True, "is_imported": False})
+    assert not any(v["rule_id"] == "R7-numeral-height-mrp" for v in verdict.violations)
+
+
 def test_four_digit_year_is_accepted():
     for date in ("07/2026", "07/26", "12-2026"):
         verdict = evaluate(

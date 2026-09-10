@@ -123,6 +123,30 @@ def _kv_table(rows: list[tuple[str, str]], styles) -> Table:
     return table
 
 
+def _decision_str(scan: Scan) -> str:
+    if not scan.officer_decision:
+        return "Not yet reviewed by an officer"
+    label = {
+        "confirmed": "Confirmed",
+        "rejected": "Rejected — finding does not stand",
+        "needs_more_evidence": "Needs more evidence",
+    }.get(scan.officer_decision, scan.officer_decision)
+    by = scan.officer_decision_by or scan.officer_name
+    when = scan.officer_decision_at.strftime("%d-%m-%Y") if scan.officer_decision_at else ""
+    return f"{label} — {by}, {when}".strip(" —,")
+
+
+def _case_status_str(case) -> str:
+    labels = {
+        "open": "Open, within response window",
+        "escalated": f"Escalated to {case.escalated_to or 'supervisor'} — response window elapsed",
+        "resolved": "Closed — resolved",
+        "unresolved": "Closed — unresolved",
+        "rejected": "Closed — finding rejected on review",
+    }
+    return labels.get(case.status, case.status)
+
+
 def _bbox_str(bbox: dict | None) -> str:
     if not bbox:
         return "not located on label"
@@ -218,6 +242,7 @@ def build_docket(scan: Scan) -> Path:
                 ),
                 ("Text-recognition source", f"{escape(scan.ocr_provider)} (language: {escape(scan.ocr_lang)})"),
                 ("Verdict", scan.verdict),
+                ("Officer review", _decision_str(scan)),
             ],
             styles,
         )
@@ -370,6 +395,27 @@ def build_docket(scan: Scan) -> Path:
                 )
             )
 
+    if scan.case:
+        case = scan.case
+        story.append(Spacer(1, 3 * mm))
+        story.append(Paragraph("Case status", styles["h2"]))
+        rows = [
+            ("Track", "Formal case" if case.track == "formal_case" else "Correction notice"),
+            ("Status", _case_status_str(case)),
+            ("Case owner", escape(case.officer_name)),
+            ("Opened", case.opened_at.strftime("%d-%m-%Y")),
+            ("Response window", f"{case.response_days} days — due {case.due_at.strftime('%d-%m-%Y')}"),
+        ]
+        if case.status == "escalated":
+            rows.append(("Escalated", case.escalated_at.strftime("%d-%m-%Y") if case.escalated_at else "—"))
+        if case.closed_at:
+            rows.append(("Closed", f"{case.closed_at.strftime('%d-%m-%Y')} by {escape(case.closed_by or '')}"))
+            if case.resolution_notes:
+                rows.append(("Resolution notes", escape(case.resolution_notes)))
+            if case.countersigned_by:
+                rows.append(("Countersigned by", escape(case.countersigned_by)))
+        story.append(_kv_table(rows, styles))
+
     crops = _crop_evidence(scan)
     if crops:
         story.append(Paragraph("F. Evidence crops from the original photograph", styles["h2"]))
@@ -508,13 +554,38 @@ def build_docket(scan: Scan) -> Path:
             styles,
         )
     )
+
+    if scan.case and scan.case.countersigned_by:
+        story.append(Spacer(1, 5 * mm))
+        story.append(
+            Paragraph(
+                "This finding was escalated past its response window and closed by a supervisor; "
+                "the record carries a countersignature alongside the certifying officer's above.",
+                styles["small"],
+            )
+        )
+        story.append(Spacer(1, 3 * mm))
+        story.append(
+            _kv_table(
+                [
+                    ("Countersignature", ""),
+                    ("Name and designation", escape(scan.case.countersigned_by)),
+                    ("Place", ""),
+                    ("Date", scan.case.closed_at.strftime("%d-%m-%Y") if scan.case.closed_at else ""),
+                ],
+                styles,
+            )
+        )
+
     story.append(Spacer(1, 4 * mm))
     story.append(
         Paragraph(
             "<b>Note:</b> This certificate is generated in draft by LabelLens for the convenience of the "
             "certifying officer. It has no legal effect until it is verified, completed and signed by a person "
             "occupying a responsible official position in relation to the operation of the relevant device, as "
-            "required by the statute. LabelLens does not issue legal process.",
+            "required by the statute; an escalated finding closed by a supervisor should carry that "
+            "countersignature as well as the officer's, not the officer's alone. LabelLens does not issue "
+            "legal process.",
             styles["small"],
         )
     )

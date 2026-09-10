@@ -77,10 +77,10 @@ rules:
     clause: "Rule 7 / Second Schedule (as amended 2022)"
     title: "Minimum numeral height for MRP declaration"
     field: mrp
-    check_type: min_height_ratio
+    check_type: numeral_height_table1
     params:
-      min_height_ratio: 0.024
-      reference: "Approximates the revised Second Schedule minimum type-size mandate. Measured as the height of the declaration's text line relative to the label image, which is scale-invariant; it is not a measurement in millimetres."
+      base_ratio_per_mm: 0.024
+      reference: "The revised Second Schedule Table I bands the minimum numeral height by declared net quantity (1mm up to 200 g/ml, 2mm from 200-500, 4mm above) — this check scales with that band rather than applying one flat figure. The threshold itself is a label-height ratio, not a millimetre measurement: 0.024 is calibrated against the 1mm band on a typical field photograph and scaled up per band from there. Without a reference object of known size in frame, no absolute error bound in millimetres can be stated; treat findings near the threshold as a prompt for closer manual inspection, not a precise measurement."
     severity: high
     message: "MRP numerals do not meet the minimum height mandated for this pack size."
 

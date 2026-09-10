@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import Base, engine
-from app.routers import evidence, rules, scans, system, worklist
+from app.routers import cases, evidence, rules, scans, system, worklist
 
 
 @asynccontextmanager
@@ -37,6 +37,7 @@ app.include_router(evidence.router)
 app.include_router(worklist.router)
 app.include_router(rules.router)
 app.include_router(system.router)
+app.include_router(cases.router)
 
 
 @app.get("/")

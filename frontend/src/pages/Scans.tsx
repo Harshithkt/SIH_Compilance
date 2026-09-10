@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
-import { ErrorBanner, Loading, VerdictBadge, formatDateTime } from "../components/common";
+import { EmptyState, ErrorBanner, Loading, VerdictBadge, formatDateTime } from "../components/common";
+import { IconCamera, IconSearch } from "../components/icons";
 import { useI18n } from "../i18n";
 import type { ScanSummary } from "../types";
 
@@ -28,20 +29,34 @@ export default function Scans() {
   return (
     <>
       <div className="page-head">
-        <h1>{t("scans.title")}</h1>
-        <p>{t("scans.subtitle")}</p>
+        <div className="page-head-text">
+          <h1>{t("scans.title")}</h1>
+          <p>{t("scans.subtitle")}</p>
+        </div>
+        <div className="page-head-actions">
+          <Link to="/inspect" className="btn btn-primary">
+            <IconCamera size={15} />
+            {t("nav.inspect")}
+          </Link>
+        </div>
       </div>
 
       <div className="card">
         <div className="card-head">
-          <input
-            type="text"
-            value={query}
-            placeholder={t("scans.search")}
-            onChange={(e) => setQuery(e.target.value)}
-            style={{ maxWidth: 260 }}
-          />
-          <select value={verdict} onChange={(e) => setVerdict(e.target.value)} style={{ maxWidth: 170 }}>
+          <div className="row" style={{ position: "relative" }}>
+            <IconSearch
+              size={14}
+              style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "var(--ink-3)" }}
+            />
+            <input
+              type="text"
+              value={query}
+              placeholder={t("scans.search")}
+              onChange={(e) => setQuery(e.target.value)}
+              style={{ maxWidth: 260, paddingLeft: 30 }}
+            />
+          </div>
+          <select value={verdict} onChange={(e) => setVerdict(e.target.value)} style={{ maxWidth: 190 }}>
             <option value="">{t("scans.all")}</option>
             <option value="REVIEW">{t("verdict.REVIEW")}</option>
             <option value="FIX">{t("verdict.FIX")}</option>
@@ -52,23 +67,31 @@ export default function Scans() {
         {!scans ? (
           <Loading />
         ) : scans.length === 0 ? (
-          <div className="empty">No inspections match.</div>
+          <EmptyState
+            icon={<IconSearch size={18} />}
+            title={t("scans.empty")}
+            action={
+              <Link to="/inspect" className="btn btn-primary">
+                {t("common.startInspection")}
+              </Link>
+            }
+          />
         ) : (
           <div className="table-scroll">
             <table>
               <thead>
                 <tr>
                   <th>Commodity</th>
-                  <th>Verdict</th>
+                  <th>Status</th>
                   <th>Rules applied</th>
                   <th>Captured</th>
                 </tr>
               </thead>
               <tbody>
                 {scans.map((scan) => (
-                  <tr key={scan.id}>
+                  <tr key={scan.id} className="clickable">
                     <td>
-                      <Link to={`/scans/${scan.id}`}>
+                      <Link to={`/inspections/${scan.id}`}>
                         <strong>{scan.product_name ?? scan.id.slice(0, 8)}</strong>
                       </Link>
                     </td>

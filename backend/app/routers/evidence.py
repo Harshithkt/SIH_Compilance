@@ -59,6 +59,7 @@ def get_docket(scan_id: str, db: Session = Depends(get_db)):
             selectinload(Scan.violations),
             selectinload(Scan.ledger_entries),
             selectinload(Scan.entity),
+            selectinload(Scan.case),
         )
         .where(Scan.id == scan_id)
     ).scalar_one_or_none()

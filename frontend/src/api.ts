@@ -1,13 +1,16 @@
 import type {
+  Case,
   ChainVerification,
   EntityDetail,
   MonthlyReport,
   Override,
   LedgerRow,
+  OfficerDecisionValue,
   Rule,
   RuleDiff,
   RuleVersionSummary,
   Scan,
+  ScanReview,
   ScanSummary,
   Stats,
   WorklistItem,
@@ -122,6 +125,39 @@ export const api = {
     }),
 
   listOverrides: (scanId: string) => request<Override[]>(`/scans/${scanId}/overrides`),
+
+  submitReview: (
+    scanId: string,
+    body: { officer_name: string; decision: OfficerDecisionValue; notes?: string },
+  ) =>
+    request<Scan>(`/scans/${scanId}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+
+  listReviews: (scanId: string) => request<ScanReview[]>(`/scans/${scanId}/reviews`),
+
+  listCases: (params: { status?: string; track?: string; entityId?: string } = {}) => {
+    const search = new URLSearchParams();
+    if (params.status) search.set("status", params.status);
+    if (params.track) search.set("track", params.track);
+    if (params.entityId) search.set("entity_id", params.entityId);
+    const suffix = search.toString() ? `?${search}` : "";
+    return request<Case[]>(`/cases${suffix}`);
+  },
+
+  getCase: (caseId: string) => request<Case>(`/cases/${caseId}`),
+
+  closeCase: (
+    caseId: string,
+    body: { officer_name: string; resolution: "resolved" | "unresolved"; notes?: string },
+  ) =>
+    request<Case>(`/cases/${caseId}/close`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
 
   worklist: () => request<WorklistItem[]>("/worklist"),
 

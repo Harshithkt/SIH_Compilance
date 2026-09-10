@@ -15,10 +15,10 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from app.config import IMAGES_DIR
+from app.config import IMAGES_DIR, settings
 from app.database import Base, SessionLocal, engine
-from app.models import Declaration, Entity, LedgerEntry, ManualOverride, Scan, Violation
-from app.services import evidence_chain, pipeline
+from app.models import Case, Declaration, Entity, LedgerEntry, ManualOverride, Scan, Violation
+from app.services import case_engine, evidence_chain, pipeline
 
 OFFICERS = ["Insp. R. Sharma", "Insp. M. Nair", "Insp. A. Bose"]
 
@@ -193,16 +193,19 @@ def make_label_image(lines: list[str], path) -> None:
     need to be legible: adequate size, contrast and sharpness. A Devanagari-capable font
     is required or the Hindi demo labels render as empty boxes.
     """
-    width, height = 900, 640
+    width, height = 900, 760
     img = Image.new("RGB", (width, height), (247, 245, 238))
     draw = ImageDraw.Draw(img)
     draw.rectangle([12, 12, width - 12, height - 12], outline=(40, 40, 40), width=3)
 
-    font = _label_font(24)
+    # Sized so a small pack's declarations clear Table I's own smallest (1mm) band —
+    # see numeral_height_table1 — rather than every synthetic label being print-size
+    # non-compliant regardless of what it declares.
+    font = _label_font(34)
     y = 55
     for line in lines:
         draw.text((45, y), line, fill=(15, 15, 15), font=font)
-        y += 48
+        y += 62
 
     # Texture keeps the focus-variance metric realistic rather than artificially flat.
     for _ in range(2500):
@@ -216,11 +219,81 @@ def reset_database() -> None:
     Base.metadata.create_all(bind=engine)
 
 
+def _apply_case_treatments(db, pending: list[tuple[Scan, str]]) -> None:
+    """Drive each non-compliant demo scan through the officer-review / case workflow so
+    the case list, worklist gating and dashboard have real, varied data to show —
+    exactly the same functions the API calls, not data inserted behind them."""
+    supervisor = settings.supervisor_role_name
+    overdue_days = max(settings.correction_notice_response_days, settings.formal_case_response_days) + 5
+
+    for scan, treatment in pending:
+        officer = scan.officer_name
+
+        if treatment == "leave_unreviewed":
+            continue
+
+        if treatment == "reject":
+            case_engine.submit_decision(
+                db, scan, officer_name=officer, decision="rejected",
+                notes="On inspection the declaration was legible; the frame was under-lit.",
+            )
+            continue
+
+        case_engine.submit_decision(db, scan, officer_name=officer, decision="confirmed")
+        case = scan.case
+
+        if treatment == "confirm_open":
+            continue  # fresh case, still within its response window
+
+        if treatment in ("confirm_overdue", "confirm_overdue_unresolved"):
+            # Back-date the window so it reads as overdue once escalation runs below —
+            # the seller was given the window and did not respond.
+            case.opened_at = case.opened_at - timedelta(days=overdue_days)
+            case.due_at = case.due_at - timedelta(days=overdue_days)
+            db.commit()
+            continue
+
+        if treatment == "confirm_resolved":
+            case_engine.close_case(
+                db, case, closed_by=officer, resolution="resolved",
+                notes="Reinspected within the window: corrected label on shelf.",
+            )
+            continue
+
+    case_engine.escalate_overdue(db)
+
+    # The one scan seeded to demonstrate an escalated case closing: closed only now,
+    # after escalation, so it carries the supervisor's countersignature.
+    for scan, treatment in pending:
+        if treatment == "confirm_overdue_unresolved" and scan.case and scan.case.status == "escalated":
+            case_engine.close_case(
+                db, scan.case, closed_by=supervisor, resolution="unresolved",
+                notes="No response within the window; referred for further enforcement action.",
+            )
+
+
+# Cycled across every non-compliant demo scan, in order, so the case workflow shows a
+# realistic spread of states rather than every case looking alike: one left for the
+# officer to review, one freshly confirmed and still within its window, one confirmed
+# and already overdue (escalated below), one the seller corrected in time, one that
+# escalated and was then closed unresolved by a supervisor (countersigned), and one the
+# officer reviewed and rejected outright.
+REVIEW_TREATMENTS = [
+    "leave_unreviewed",
+    "confirm_open",
+    "confirm_overdue",
+    "confirm_resolved",
+    "confirm_overdue_unresolved",
+    "reject",
+]
+
+
 def seed() -> None:
     random.seed(26034)
     reset_database()
     db = SessionLocal()
     now = datetime.now(timezone.utc)
+    pending_treatment: list[tuple[Scan, str]] = []
 
     try:
         for index, (_, product, lines, is_food, is_imported) in enumerate(DEMO_LABELS):
@@ -244,7 +317,7 @@ def seed() -> None:
                 else now - timedelta(days=random.randint(0, 45), hours=random.randint(0, 23))
             )
 
-            pipeline.run_scan(
+            scan, _ = pipeline.run_scan(
                 db,
                 image_path=image_path,
                 image_sha256=image_hash,
@@ -260,6 +333,12 @@ def seed() -> None:
                 rule_version=rule_version,
             )
 
+            if scan.verdict != "GO":
+                treatment = REVIEW_TREATMENTS[len(pending_treatment) % len(REVIEW_TREATMENTS)]
+                pending_treatment.append((scan, treatment))
+
+        _apply_case_treatments(db, pending_treatment)
+
         counts = {
             "entities": db.query(Entity).count(),
             "scans": db.query(Scan).count(),
@@ -267,6 +346,11 @@ def seed() -> None:
             "violations": db.query(Violation).count(),
             "ledger_entries": db.query(LedgerEntry).count(),
             "overrides": db.query(ManualOverride).count(),
+            "cases": db.query(Case).count(),
+            "cases_by_status": {
+                status: db.query(Case).filter(Case.status == status).count()
+                for status in ("open", "escalated", "resolved", "unresolved", "rejected")
+            },
         }
         print("Seeded:", counts)
         print("Ledger check:", evidence_chain.verify_chain(db)["detail"])

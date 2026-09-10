@@ -7,6 +7,7 @@
  * one at a time when the officer is back online.
  */
 
+import { useCallback, useEffect, useState } from "react";
 import { api, type CaptureInput } from "./api";
 
 const DB_NAME = "labellens";
@@ -101,4 +102,49 @@ export async function flush(): Promise<FlushResult> {
   }
 
   return result;
+}
+
+/** Shared queue status, so the sidebar's sync indicator and the capture page's own
+ *  banner read the same number rather than each polling IndexedDB independently. */
+export function useQueueStatus() {
+  const [count, setCount] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+  const [lastResult, setLastResult] = useState<FlushResult | null>(null);
+  const [online, setOnline] = useState(() => navigator.onLine);
+
+  const refresh = useCallback(async () => {
+    setCount((await listQueued()).length);
+  }, []);
+
+  const sync = useCallback(async () => {
+    setSyncing(true);
+    try {
+      const result = await flush();
+      if (result.sent || result.failed) setLastResult(result);
+      return result;
+    } finally {
+      setSyncing(false);
+      await refresh();
+    }
+  }, [refresh]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    const goOnline = () => {
+      setOnline(true);
+      sync();
+    };
+    const goOffline = () => setOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, [sync]);
+
+  return { count, syncing, online, lastResult, refresh, sync, clearResult: () => setLastResult(null) };
 }

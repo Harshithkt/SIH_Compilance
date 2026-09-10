@@ -29,6 +29,55 @@ class ViolationOut(BaseModel):
     bbox: dict | None
 
 
+class CaseOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    scan_id: str
+    entity_id: str | None
+    entity_name: str | None
+    product_name: str | None
+    track: str
+    severity: str
+    status: str
+    officer_name: str
+    rule_version: str
+    opened_at: datetime
+    due_at: datetime
+    response_days: int
+    is_overdue: bool
+    escalated_at: datetime | None
+    escalated_to: str | None
+    closed_at: datetime | None
+    closed_by: str | None
+    resolution_notes: str | None
+    evidence_hash_at_close: str | None
+    countersigned_by: str | None
+
+
+class ReviewIn(BaseModel):
+    officer_name: str
+    decision: str  # confirmed | rejected | needs_more_evidence
+    notes: str | None = None
+
+
+class ReviewOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    scan_id: str
+    officer_name: str
+    decision: str
+    notes: str | None
+    created_at: datetime
+
+
+class CaseCloseIn(BaseModel):
+    officer_name: str
+    resolution: str  # resolved | unresolved
+    notes: str | None = None
+
+
 class LedgerEntryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -57,9 +106,14 @@ class ScanOut(BaseModel):
     product_name: str | None
     is_food_item: bool
     is_imported: bool
+    officer_decision: str | None
+    officer_decision_by: str | None
+    officer_decision_at: datetime | None
+    officer_decision_notes: str | None
     declarations: list[DeclarationOut] = []
     violations: list[ViolationOut] = []
     ledger_entry: LedgerEntryOut | None = None
+    case: CaseOut | None = None
 
 
 class ScanSummaryOut(BaseModel):
@@ -71,6 +125,7 @@ class ScanSummaryOut(BaseModel):
     product_name: str | None
     captured_at: datetime
     rule_version: str
+    officer_decision: str | None
 
 
 class EntityOut(BaseModel):

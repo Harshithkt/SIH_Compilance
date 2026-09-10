@@ -26,6 +26,17 @@ class Settings(BaseSettings):
     nebius_timeout_seconds: float = 90.0
     ocr_provider: str = "auto"  # auto | nebius | tesseract | manual
 
+    # Case-management response windows (calendar days from officer confirmation).
+    # A minor (FIX) finding gets a correction notice; a serious (REVIEW) finding opens
+    # a formal case with a longer window, matching the severity of what is being asked
+    # of the seller. Chosen as reasonable defaults, not derived from a specific rule.
+    correction_notice_response_days: int = 15
+    formal_case_response_days: int = 30
+    # There is no user/role system in this build, so an escalated case is assigned to a
+    # named role rather than a specific account — surfaced in the UI and the docket's
+    # countersignature line.
+    supervisor_role_name: str = "Superintendent, Legal Metrology"
+
     model_config = {"env_prefix": "LABELLENS_", "env_file": str(BASE_DIR / ".env"), "extra": "ignore"}
 
 

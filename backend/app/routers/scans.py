@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.models import Declaration, ManualOverride, Scan
-from app.schemas import OverrideIn, OverrideOut, ScanOut, ScanSummaryOut
-from app.services import evidence_chain, extraction, nebius, pipeline, rule_engine
+from app.schemas import OverrideIn, OverrideOut, ReviewIn, ReviewOut, ScanOut, ScanSummaryOut
+from app.services import case_engine, evidence_chain, extraction, nebius, pipeline, rule_engine
 
 router = APIRouter(prefix="/api/v1/scans", tags=["scans"])
 
@@ -21,6 +21,7 @@ def _load_scan(db: Session, scan_id: str) -> Scan:
             selectinload(Scan.violations),
             selectinload(Scan.ledger_entries),
             selectinload(Scan.entity),
+            selectinload(Scan.case),
         )
         .where(Scan.id == scan_id)
     ).scalar_one_or_none()
@@ -181,6 +182,20 @@ def _reevaluate(db: Session, scan: Scan) -> None:
     scan.verdict = verdict.result
     scan.not_assessed = verdict.not_assessed
     db.flush()
+
+    # An officer correction that cures every finding resolves an open case on its own —
+    # the record was put right, which is exactly what the response window exists to
+    # allow. A case that is still warranted (verdict still FIX/REVIEW) keeps its
+    # existing due date rather than getting a fresh window from the correction.
+    if scan.verdict == "GO" and scan.case and scan.case.status in ("open", "escalated"):
+        case_engine.close_case(
+            db,
+            scan.case,
+            closed_by=scan.officer_decision_by or scan.officer_name,
+            resolution="resolved",
+            notes="Automatically resolved: an officer correction to the declarations cured every finding.",
+        )
+
     db.refresh(scan)
     evidence_chain.append_scan(db, scan)
 
@@ -192,6 +207,38 @@ def list_overrides(scan_id: str, db: Session = Depends(get_db)):
             select(ManualOverride)
             .where(ManualOverride.scan_id == scan_id)
             .order_by(ManualOverride.created_at.desc())
+        )
+        .scalars()
+        .all()
+    )
+
+
+@router.post("/{scan_id}/review", response_model=ScanOut)
+def review_scan(scan_id: str, payload: ReviewIn, db: Session = Depends(get_db)):
+    """The officer's decision on this scan's AI verdict — confirm, reject, or ask for
+    more evidence. Only this becomes official; the AI's own verdict is never rewritten.
+    Confirming a FIX or REVIEW opens the corresponding case (see case_engine)."""
+    scan = _load_scan(db, scan_id)
+    if payload.decision not in case_engine.DECISIONS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"decision must be one of {case_engine.DECISIONS}",
+        )
+    case_engine.submit_decision(
+        db, scan, officer_name=payload.officer_name, decision=payload.decision, notes=payload.notes
+    )
+    return _load_scan(db, scan_id)
+
+
+@router.get("/{scan_id}/reviews", response_model=list[ReviewOut])
+def list_reviews(scan_id: str, db: Session = Depends(get_db)):
+    from app.models import ScanReview
+
+    return (
+        db.execute(
+            select(ScanReview)
+            .where(ScanReview.scan_id == scan_id)
+            .order_by(ScanReview.created_at.desc())
         )
         .scalars()
         .all()

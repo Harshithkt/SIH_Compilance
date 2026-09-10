@@ -36,6 +36,7 @@ class Entity(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     scans: Mapped[list["Scan"]] = relationship(back_populates="entity")
+    cases: Mapped[list["Case"]] = relationship(back_populates="entity")
 
 
 class Scan(Base):
@@ -59,6 +60,16 @@ class Scan(Base):
     is_food_item: Mapped[bool] = mapped_column(Boolean, default=False)
     is_imported: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # The AI's verdict above is never overwritten by review. The officer's decision on
+    # it is a separate, later fact: confirmed (the finding stands and, if it is a FIX or
+    # REVIEW, opens a case), rejected (the officer determined the finding does not
+    # stand), or needs_more_evidence (inconclusive from this capture). Null means no
+    # officer has reviewed this scan yet.
+    officer_decision: Mapped[str | None] = mapped_column(String, nullable=True)
+    officer_decision_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    officer_decision_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    officer_decision_notes: Mapped[str | None] = mapped_column(String, nullable=True)
+
     entity: Mapped["Entity | None"] = relationship(back_populates="scans")
     declarations: Mapped[list["Declaration"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan"
@@ -72,6 +83,12 @@ class Scan(Base):
         back_populates="scan",
         cascade="all, delete-orphan",
         order_by="LedgerEntry.sequence",
+    )
+    reviews: Mapped[list["ScanReview"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan", order_by="ScanReview.created_at"
+    )
+    case: Mapped["Case | None"] = relationship(
+        back_populates="scan", uselist=False, cascade="all, delete-orphan"
     )
 
     @property
@@ -153,3 +170,81 @@ class ManualOverride(Base):
     new_value: Mapped[str | None] = mapped_column(String, nullable=True)
     reason: Mapped[str] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class ScanReview(Base):
+    """Append-only log of every officer decision on a scan's AI verdict.
+
+    `Scan.officer_decision` holds the current decision; this table keeps every decision
+    ever recorded (an officer can re-review), the same append-only pattern as
+    ManualOverride keeps for declaration corrections.
+    """
+
+    __tablename__ = "scan_reviews"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    scan_id: Mapped[str] = mapped_column(ForeignKey("scans.id"))
+    officer_name: Mapped[str] = mapped_column(String)
+    decision: Mapped[str] = mapped_column(String)  # confirmed | rejected | needs_more_evidence
+    notes: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    scan: Mapped["Scan"] = relationship(back_populates="reviews")
+
+
+class Case(Base):
+    """The enforcement case opened once an officer confirms a FIX or REVIEW verdict.
+
+    A confirmed minor (FIX) finding opens a correction-notice track; a confirmed
+    serious (REVIEW) finding opens a formal case — both carry an owner and a due date.
+    A case left open past its due date is escalated automatically (checked lazily
+    whenever cases are read, since this deployment has no background scheduler) rather
+    than silently expiring. Findings only enter the seller's pattern history — the
+    worklist's risk score — once the response window has closed one way or another;
+    see risk_scoring.counted_violations. One scan carries at most one case: a further
+    confirmed finding on the same scan (e.g. after a correction) reopens the same case
+    rather than stacking a second one.
+    """
+
+    __tablename__ = "cases"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    scan_id: Mapped[str] = mapped_column(ForeignKey("scans.id"), unique=True)
+    entity_id: Mapped[str | None] = mapped_column(ForeignKey("entities.id"), nullable=True)
+    track: Mapped[str] = mapped_column(String)  # correction_notice | formal_case
+    severity: Mapped[str] = mapped_column(String)  # worst violation severity at open time
+    status: Mapped[str] = mapped_column(String, default="open")
+    # open | escalated | resolved | unresolved | rejected
+    officer_name: Mapped[str] = mapped_column(String)  # case owner
+    rule_version: Mapped[str] = mapped_column(String)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    response_days: Mapped[int] = mapped_column(Integer)
+    escalated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    escalated_to: Mapped[str | None] = mapped_column(String, nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    resolution_notes: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Snapshot of the scan's committed ledger-entry hash at the moment the case closed,
+    # so the audit record ties the outcome to the exact evidence state it was decided on.
+    evidence_hash_at_close: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Set when a case that was escalated is later closed: the supervisor's name stands
+    # alongside the officer's on the record and on the docket's certificate.
+    countersigned_by: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    scan: Mapped["Scan"] = relationship(back_populates="case")
+    entity: Mapped["Entity | None"] = relationship(back_populates="cases")
+
+    @property
+    def is_overdue(self) -> bool:
+        now = _now()
+        due = self.due_at if self.due_at.tzinfo else self.due_at.replace(tzinfo=now.tzinfo)
+        return self.status == "open" and due < now
+
+    @property
+    def entity_name(self) -> str | None:
+        return self.entity.name if self.entity else None
+
+    @property
+    def product_name(self) -> str | None:
+        return self.scan.product_name if self.scan else None

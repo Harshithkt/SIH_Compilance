@@ -1,21 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, api } from "../api";
+import { ConfirmDialog, Steps } from "../components/common";
+import { IconCamera, IconUpload } from "../components/icons";
 import { useI18n } from "../i18n";
-import { enqueue, flush, listQueued } from "../offlineQueue";
+import { enqueue, useQueueStatus } from "../offlineQueue";
 import type { QualityReport } from "../types";
 
-const OFFICER_KEY = "labellens.officer";
+interface CaptureProps {
+  officerName: string;
+  setOfficerName: (name: string) => void;
+}
 
-export default function Capture() {
+export default function Capture({ officerName, setOfficerName }: CaptureProps) {
   const { t, lang } = useI18n();
   const navigate = useNavigate();
   const fileInput = useRef<HTMLInputElement>(null);
+  const queue = useQueueStatus();
 
-  const [officer, setOfficer] = useState(() => localStorage.getItem(OFFICER_KEY) ?? "");
+  const [officer, setOfficer] = useState(officerName);
   const [product, setProduct] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const [isFood, setIsFood] = useState(true);
   const [isImported, setIsImported] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
@@ -24,44 +31,23 @@ export default function Capture() {
   const [showOffline, setShowOffline] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [rejection, setRejection] = useState<QualityReport | null>(null);
+  const [confirmAnyway, setConfirmAnyway] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [provider, setProvider] = useState<string>("");
-  const [queuedCount, setQueuedCount] = useState(0);
-  const [syncing, setSyncing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-
-  const refreshQueue = useCallback(async () => {
-    setQueuedCount((await listQueued()).length);
-  }, []);
-
-  const syncQueue = useCallback(async () => {
-    setSyncing(true);
-    try {
-      const result = await flush();
-      if (result.sent || result.failed) {
-        setNotice(
-          `Synced ${result.sent} queued inspection${result.sent === 1 ? "" : "s"}` +
-            (result.failed ? `; ${result.failed} rejected by the server.` : "."),
-        );
-      }
-    } finally {
-      setSyncing(false);
-      refreshQueue();
-    }
-  }, [refreshQueue]);
 
   useEffect(() => {
     api
       .health()
       .then((h) => setProvider(h.text_recognition_provider))
       .catch(() => setProvider(""));
-    refreshQueue();
-  }, [refreshQueue]);
+  }, []);
 
+  // The manual provider means no vision backend is reachable, so offline entry is the
+  // only way to get declarations in — surface it rather than letting the scan come back empty.
   useEffect(() => {
-    window.addEventListener("online", syncQueue);
-    return () => window.removeEventListener("online", syncQueue);
-  }, [syncQueue]);
+    if (provider === "manual") setShowOffline(true);
+  }, [provider]);
 
   useEffect(() => {
     if (!file) {
@@ -72,12 +58,6 @@ export default function Capture() {
     setPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [file]);
-
-  // The manual provider means no vision backend is reachable, so offline entry is the
-  // only way to get declarations in — surface it rather than letting the scan come back empty.
-  useEffect(() => {
-    if (provider === "manual") setShowOffline(true);
-  }, [provider]);
 
   function locate() {
     setLocating(true);
@@ -91,12 +71,18 @@ export default function Capture() {
     );
   }
 
+  const pickFile = useCallback((f: File | null | undefined) => {
+    if (!f) return;
+    setFile(f);
+    setRejection(null);
+  }, []);
+
   async function submit(skipQualityGate = false) {
     if (!file || !officer.trim()) return;
     setSubmitting(true);
     setError(null);
     setRejection(null);
-    localStorage.setItem(OFFICER_KEY, officer.trim());
+    setOfficerName(officer);
 
     const input = {
       image: file,
@@ -113,7 +99,7 @@ export default function Capture() {
 
     try {
       const result = await api.createScan(input);
-      navigate(`/scans/${result.scan.id}`);
+      navigate(`/inspections/${result.scan.id}`);
     } catch (err) {
       if (err instanceof ApiError && err.status === 422) {
         setRejection(err.detail as QualityReport);
@@ -123,7 +109,7 @@ export default function Capture() {
         // No response at all — the officer is out of signal. Hold the inspection
         // locally rather than losing the capture.
         await enqueue(input);
-        await refreshQueue();
+        await queue.refresh();
         setFile(null);
         setProduct("");
         setNotice(
@@ -135,26 +121,32 @@ export default function Capture() {
     }
   }
 
+  const currentStep = submitting ? 1 : 0;
+
   return (
     <>
       <div className="page-head">
-        <h1>{t("capture.title")}</h1>
-        <p>{t("capture.subtitle")}</p>
+        <div className="page-head-text">
+          <h1>{t("capture.title")}</h1>
+          <p>{t("capture.subtitle")}</p>
+        </div>
       </div>
 
-      {queuedCount > 0 && (
+      <Steps current={currentStep} />
+
+      {queue.count > 0 && (
         <div
           className="banner banner-warn row"
           style={{ justifyContent: "space-between", marginBottom: 16 }}
         >
           <span>
             <strong>
-              {queuedCount} inspection{queuedCount === 1 ? "" : "s"} held on this device
+              {queue.count} inspection{queue.count === 1 ? "" : "s"} held on this device
             </strong>{" "}
             — captured without connectivity and not yet committed to the ledger.
           </span>
-          <button className="btn btn-sm btn-primary" onClick={syncQueue} disabled={syncing}>
-            {syncing ? "Syncing…" : "Sync now"}
+          <button className="btn btn-sm btn-primary" onClick={queue.sync} disabled={queue.syncing}>
+            {queue.syncing ? "Syncing…" : "Sync now"}
           </button>
         </div>
       )}
@@ -190,20 +182,6 @@ export default function Capture() {
               value={product}
               onChange={(e) => setProduct(e.target.value)}
               placeholder="Masala Namkeen 200g"
-            />
-          </label>
-
-          <label className="field">
-            {t("capture.photo")}
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={(e) => {
-                setFile(e.target.files?.[0] ?? null);
-                setRejection(null);
-              }}
             />
           </label>
 
@@ -285,7 +263,7 @@ export default function Capture() {
                 >
                   {t("capture.retake")}
                 </button>
-                <button className="btn btn-sm" onClick={() => submit(true)} disabled={submitting}>
+                <button className="btn btn-sm" onClick={() => setConfirmAnyway(true)} disabled={submitting}>
                   {t("capture.useAnyway")}
                 </button>
               </div>
@@ -293,34 +271,83 @@ export default function Capture() {
           )}
 
           <button
-            className="btn btn-primary"
+            className="btn btn-primary btn-lg"
             onClick={() => submit(false)}
             disabled={!file || !officer.trim() || submitting}
           >
+            <IconCamera size={16} />
             {submitting ? t("capture.submitting") : t("capture.submit")}
           </button>
         </div>
 
-        <div className="card card-pad">
-          {preview ? (
-            <img
-              src={preview}
-              alt="Selected label"
-              style={{ maxWidth: "100%", borderRadius: 6, display: "block" }}
-            />
-          ) : (
-            <div className="empty">{t("capture.photo")}</div>
-          )}
+        <div className="stack">
+          <div className="card card-pad">
+            {preview ? (
+              <div className="stack" style={{ gap: 10 }}>
+                <div className="label-viewer" style={{ display: "block" }}>
+                  <img src={preview} alt="Selected label" />
+                </div>
+                <button className="btn btn-sm btn-block" onClick={() => fileInput.current?.click()}>
+                  {t("capture.change")}
+                </button>
+              </div>
+            ) : (
+              <div
+                className={`dropzone${dragOver ? " drag" : ""}`}
+                onClick={() => fileInput.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  pickFile(e.dataTransfer.files?.[0]);
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                <div className="dropzone-icon">
+                  <IconUpload size={30} />
+                </div>
+                <h3>{t("capture.dropTitle")}</h3>
+                <p>{t("capture.dropHint")}</p>
+              </div>
+            )}
 
-          {provider && (
-            <p className="muted" style={{ marginBottom: 0, fontSize: 12.5 }}>
-              Text recognition: <code>{provider}</code>
-              {provider === "manual" &&
-                " — no vision backend configured, so type the declarations above."}
-            </p>
-          )}
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: "none" }}
+              onChange={(e) => pickFile(e.target.files?.[0])}
+            />
+
+            {provider && (
+              <p className="muted" style={{ marginBottom: 0, marginTop: 12, fontSize: 12.5 }}>
+                Text recognition: <code>{provider}</code>
+                {provider === "manual" &&
+                  " — no vision backend configured, so type the declarations above."}
+              </p>
+            )}
+          </div>
         </div>
       </div>
+
+      {confirmAnyway && (
+        <ConfirmDialog
+          title={t("capture.confirmTitle")}
+          body={t("capture.confirmBody")}
+          confirmLabel={t("capture.useAnyway")}
+          onConfirm={() => {
+            setConfirmAnyway(false);
+            submit(true);
+          }}
+          onCancel={() => setConfirmAnyway(false)}
+        />
+      )}
     </>
   );
 }

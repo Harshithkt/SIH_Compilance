@@ -1,5 +1,8 @@
 export type Verdict = "GO" | "FIX" | "REVIEW" | "PENDING";
 export type Severity = "high" | "medium" | "low";
+export type OfficerDecisionValue = "confirmed" | "rejected" | "needs_more_evidence";
+export type CaseTrack = "correction_notice" | "formal_case";
+export type CaseStatus = "open" | "escalated" | "resolved" | "unresolved" | "rejected";
 
 export interface BBox {
   x: number;
@@ -38,6 +41,39 @@ export interface LedgerEntry {
   created_at: string;
 }
 
+export interface Case {
+  id: string;
+  scan_id: string;
+  entity_id: string | null;
+  entity_name: string | null;
+  product_name: string | null;
+  track: CaseTrack;
+  severity: Severity;
+  status: CaseStatus;
+  officer_name: string;
+  rule_version: string;
+  opened_at: string;
+  due_at: string;
+  response_days: number;
+  is_overdue: boolean;
+  escalated_at: string | null;
+  escalated_to: string | null;
+  closed_at: string | null;
+  closed_by: string | null;
+  resolution_notes: string | null;
+  evidence_hash_at_close: string | null;
+  countersigned_by: string | null;
+}
+
+export interface ScanReview {
+  id: string;
+  scan_id: string;
+  officer_name: string;
+  decision: OfficerDecisionValue;
+  notes: string | null;
+  created_at: string;
+}
+
 export interface Scan {
   id: string;
   entity_id: string | null;
@@ -54,9 +90,14 @@ export interface Scan {
   product_name: string | null;
   is_food_item: boolean;
   is_imported: boolean;
+  officer_decision: OfficerDecisionValue | null;
+  officer_decision_by: string | null;
+  officer_decision_at: string | null;
+  officer_decision_notes: string | null;
   declarations: Declaration[];
   violations: Violation[];
   ledger_entry: LedgerEntry | null;
+  case: Case | null;
 }
 
 export interface ScanSummary {
@@ -66,6 +107,7 @@ export interface ScanSummary {
   product_name: string | null;
   captured_at: string;
   rule_version: string;
+  officer_decision: OfficerDecisionValue | null;
 }
 
 export interface QualityReport {
@@ -90,6 +132,7 @@ export interface WorklistItem {
   latest_verdict: Verdict | null;
   latest_scan_at: string | null;
   top_clauses: { clause: string; count: number }[];
+  pending_response_count: number;
 }
 
 export interface Stats {
@@ -98,6 +141,8 @@ export interface Stats {
   total_violations: number;
   entities_tracked: number;
   top_clauses: { clause: string; count: number }[];
+  pending_review: number;
+  cases: Record<CaseStatus, number>;
 }
 
 export interface LedgerRow extends LedgerEntry {
@@ -163,6 +208,7 @@ export interface EntityDetail {
   scan_count: number;
   violation_count: number;
   high_severity_count: number;
+  pending_response_count: number;
   top_clauses: { clause: string; count: number }[];
   scans: ScanSummary[];
 }
@@ -175,6 +221,7 @@ export interface MonthlyReport {
     non_compliance_rate: number;
     findings: number;
     entities_with_findings: number;
+    pending_response: number;
   };
   verdicts: Record<string, number>;
   rule_versions_applied: Record<string, number>;
