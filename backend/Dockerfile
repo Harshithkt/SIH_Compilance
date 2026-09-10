@@ -1,9 +1,9 @@
-FROM python:3.12-slim
+FROM python:3.12-slim-bookworm
 
 # Tesseract is the offline fallback reader; the Devanagari font is what keeps Hindi
 # values legible in generated dockets.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      tesseract-ocr tesseract-ocr-hin fonts-noto-devanagari \
+  tesseract-ocr tesseract-ocr-hin fonts-noto-core \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
