@@ -1,6 +1,6 @@
 version: "2011-v1"
-title: "Legal Metrology (Packaged Commodities) Rules, 2011 — Rule 6/7/8/18 subset"
-effective_date: "2011-11-14"
+title: "Legal Metrology (Packaged Commodities) Rules, 2011"
+effective_date: "2011-04-01"
 superseded_by: "2022-v2"
 rules:
   - id: R6-a-mfg-importer-packer
@@ -19,8 +19,8 @@ rules:
     severity: medium
     message: "The common or generic name of the commodity must be declared."
 
-  - id: R6-b-net-quantity
-    clause: "Rule 6(1)(b)"
+  - id: R6-c-net-quantity
+    clause: "Rule 6(1)(c)"
     title: "Net quantity in standard units"
     field: net_quantity
     check_type: regex
@@ -30,8 +30,8 @@ rules:
     severity: high
     message: "Net quantity must be declared in standard metric units (g/kg/ml/l)."
 
-  - id: R6-c-mrp
-    clause: "Rule 6(1)(c)"
+  - id: R6-e-mrp
+    clause: "Rule 6(1)(e)"
     title: "Retail sale price (MRP)"
     field: mrp
     check_type: regex
@@ -52,27 +52,49 @@ rules:
     severity: high
     message: "Month and year of manufacture, packing, or import must be declared."
 
-  - id: R6-e-consumer-care
-    clause: "Rule 6(1)(e)"
+  - id: R6-2-consumer-care
+    clause: "Rule 6(2)"
     title: "Consumer care / complaint contact"
     field: consumer_care
     check_type: presence
     severity: medium
     message: "Consumer care details (address/phone/email) for complaints must be declared."
 
-  - id: R6-country-of-origin
+  - id: R6-f-dimensions
     clause: "Rule 6(1)(f)"
-    title: "Country of origin (imported goods)"
-    field: country_of_origin
+    title: "Dimensions where relevant"
+    field: dimensions
     check_type: presence
-    severity: low
-    message: "Country of origin must be declared for imported packages."
+    severity: medium
+    message: "The dimensions of the commodity must be declared where relevant."
+    applies_if:
+      field: dimensions_relevant
+      equals: true
+
+  - id: R6-g-other-mandatory-matter
+    clause: "Rule 6(1)(g)"
+    title: "Other declarations required by the rules"
+    field: other_mandatory_declarations
+    check_type: presence
+    severity: medium
+    message: "Other declarations required by the rules must be present."
+    applies_if:
+      field: other_declarations_required
+      equals: true
+
+  - id: R10-importer
+    clause: "Rule 10(1)"
+    title: "Importer name and complete address"
+    field: importer_details
+    check_type: presence
+    severity: high
+    message: "Imported packages must declare the name and complete address of the importer."
     applies_if:
       field: is_imported
       equals: true
 
   - id: R7-numeral-height-mrp
-    clause: "Rule 7 / Second Schedule"
+    clause: "Rule 7(2)"
     title: "Minimum numeral height for MRP declaration"
     field: mrp
     check_type: min_height_ratio

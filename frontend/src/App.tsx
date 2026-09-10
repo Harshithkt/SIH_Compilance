@@ -17,6 +17,9 @@ export default function App() {
       <header className="topbar">
         <div className="topbar-inner">
           <NavLink to="/" className="brand">
+            <span className="brand-mark" aria-hidden="true">
+              LL
+            </span>
             {t("app.name")}
             <small>{t("app.tagline")}</small>
           </NavLink>

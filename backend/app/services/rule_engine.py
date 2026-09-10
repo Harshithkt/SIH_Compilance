@@ -16,6 +16,7 @@ from pathlib import Path
 import yaml
 
 from app.config import RULES_DIR
+from app.services import quantity as qty
 
 
 @dataclass
@@ -34,6 +35,10 @@ class Verdict:
     # Checks that could not be performed on this capture (e.g. numeral height when the
     # text was recognised without coordinates). Reported, never counted as a breach.
     not_assessed: list[dict] = field(default_factory=list)
+    # Provisions that do not apply to this package at all — Rule 26 exemptions and the
+    # Rule 3 scope limits. Recorded so the docket shows why a rule was not applied.
+    exempted: list[dict] = field(default_factory=list)
+    scope_note: str | None = None
 
 
 class RulePack:

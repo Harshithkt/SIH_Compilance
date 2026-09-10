@@ -40,14 +40,14 @@ def test_missing_mrp_is_high_severity_and_forces_review():
     values = {k: v for k, v in COMPLIANT.items() if k != "mrp"}
     verdict = evaluate(PACK, build(values), {"is_food_item": True, "is_imported": False})
     assert verdict.result == "REVIEW"
-    assert any(v["rule_id"] == "R6-c-mrp" and v["severity"] == "high" for v in verdict.violations)
+    assert any(v["rule_id"] == "R6-e-mrp" and v["severity"] == "high" for v in verdict.violations)
 
 
 def test_violations_carry_clause_citations():
     values = {k: v for k, v in COMPLIANT.items() if k != "mrp"}
     verdict = evaluate(PACK, build(values), {"is_food_item": True, "is_imported": False})
-    mrp_violation = next(v for v in verdict.violations if v["rule_id"] == "R6-c-mrp")
-    assert mrp_violation["clause"] == "Rule 6(1)(c)"
+    mrp_violation = next(v for v in verdict.violations if v["rule_id"] == "R6-e-mrp")
+    assert mrp_violation["clause"] == "Rule 6(1)(e)"
     assert mrp_violation["message"]
 
 
@@ -57,11 +57,11 @@ def test_only_low_and_medium_findings_yield_fix_not_review():
     assert verdict.result == "FIX"
 
 
-def test_country_of_origin_applies_only_to_imports():
+def test_importer_details_apply_only_to_imports():
     domestic = evaluate(PACK, build(COMPLIANT), {"is_food_item": True, "is_imported": False})
     imported = evaluate(PACK, build(COMPLIANT), {"is_food_item": True, "is_imported": True})
-    assert not any(v["rule_id"] == "R6-country-of-origin" for v in domestic.violations)
-    assert any(v["rule_id"] == "R6-country-of-origin" for v in imported.violations)
+    assert not any(v["rule_id"] == "R10-importer" for v in domestic.violations)
+    assert any(v["rule_id"] == "R10-importer" for v in imported.violations)
 
 
 def test_fssai_check_applies_only_to_food_items():
@@ -113,7 +113,7 @@ def test_absent_declaration_is_reported_once_not_also_as_undersized_print():
     values = {k: v for k, v in COMPLIANT.items() if k != "mrp"}
     verdict = evaluate(PACK, build(values), {"is_food_item": True, "is_imported": False})
 
-    assert any(v["rule_id"] == "R6-c-mrp" for v in verdict.violations)
+    assert any(v["rule_id"] == "R6-e-mrp" for v in verdict.violations)
     assert not any(v["rule_id"] == "R7-numeral-height-mrp" for v in verdict.violations)
     assert not any(n["rule_id"] == "R7-numeral-height-mrp" for n in verdict.not_assessed)
 
