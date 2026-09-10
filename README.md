@@ -41,6 +41,18 @@ npm run dev                  # http://localhost:5173 (proxies /api to :8000)
 
 API docs: <http://localhost:8000/docs>
 
+### With Docker
+
+```bash
+echo "NEBIUS_API_KEY=your-key" > .env
+docker compose up --build          # app on http://localhost:8080
+docker compose exec backend python -m app.seed
+```
+
+Evidence images, dockets and the ledger live in named volumes, so case files survive a
+container rebuild. *(The compose setup has not yet been run end to end — no Docker daemon
+was available on the machine it was written on.)*
+
 ### Configuration
 
 All settings live in `backend/.env` (see `.env.example`). Only the API key is required.
@@ -101,7 +113,18 @@ verdict?*
 One scan is a data point; the same importer breaching the same clause across forty SKUs is a
 case. Scans resolve to manufacturer/packer/importer entities and are scored by
 severity weight × repeat contraventions × recency, so the queue is ordered by risk rather
-than recency.
+than recency. Each entity has its own page showing every inspection against it and the
+clauses it breaches most often, and `GET /api/v1/reports/monthly` rolls a period up into
+the figures a controller's office is asked for — carrying the ledger's integrity status,
+because a compliance number is only worth as much as the records behind it still verifying.
+
+### Correcting a misread
+
+Text recognition is not perfect, particularly on Devanagari. An officer can correct any
+declaration from the inspection page; the correction requires a reason, is logged with the
+officer's name, re-runs the rule engine against the *pinned* rule version, and is appended
+to the ledger as a further entry. The original commit stays in the chain and remains
+verifiable — history is added to, never rewritten.
 
 ---
 
@@ -112,9 +135,15 @@ These are deliberate, and they are what keeps the claims defensible:
 - **The verdict is never model-generated.** The vision model reads text; a deterministic
   regex/keyword layer maps it onto regulated declarations; the rule engine decides. The LLM is
   used only for optional plain-language explanations, which are labelled as advisory.
-- **Unmeasurable is not the same as non-compliant.** When a declaration is read without
-  coordinates, the numeral-height check cannot run, and it is reported as *not assessable* —
-  never as a contravention. A false accusation in an evidence docket is worse than a gap.
+- **Unmeasurable is not the same as non-compliant.** When a declaration's position on the
+  label cannot be established, the type-size check cannot run, and it is reported as *not
+  assessable* — never as a contravention. A false accusation in an evidence docket is worse
+  than a gap. Equally, coordinates are measured from the photograph, never invented: if the
+  measured line count does not match the recognised line count, no box is recorded.
+- **Type size is scale-invariant.** The check compares a declaration's measured line height
+  as a fraction of the label, not in absolute pixels, so the verdict does not depend on how
+  close the officer stood. It approximates the Second Schedule mandate; it is not a
+  measurement in millimetres, and the docket says so.
 - **Bad frames are rejected, not guessed at.** The capture gate checks resolution, focus,
   glare and contrast, and tells the officer what to fix.
 - **Devanagari in PDFs.** ReportLab does not run OpenType shaping, so Hindi values can be
@@ -159,12 +188,14 @@ backend/
       rule_engine.py  clause evaluation, verdicts, version diffing
       evidence_chain.py  hash-chained ledger + verification
       docket_pdf.py   evidence docket & draft certificate
+      layout.py       text-line geometry measured from the photograph
       risk_scoring.py entity risk scoring
+      compliance_report.py  periodic report for the controller's office
       pipeline.py     capture → gate → read → extract → evaluate → commit
     routers/          FastAPI endpoints
 frontend/
   src/
-    pages/            Inspect, Worklist, Inspections, Ledger, Rule packs
+    pages/            Inspect, Worklist, Entity, Inspections, Ledger, Report, Rule packs
     offlineQueue.ts   IndexedDB queue for inspections captured without signal
     i18n.tsx          English / Hindi UI
 ```
