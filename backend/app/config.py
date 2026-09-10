@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     nebius_timeout_seconds: float = 90.0
     ocr_provider: str = "auto"  # auto | nebius | tesseract | manual
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    seed_secret: str | None = None
     # A platform like Vercel gives every preview deploy its own subdomain, which a fixed
     # origin list can't enumerate in advance — set e.g.
     # LABELLENS_CORS_ORIGIN_REGEX=https://.*\.vercel\.app to allow all of them alongside

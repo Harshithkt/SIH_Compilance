@@ -57,6 +57,7 @@ In the service's **Environment** tab:
 | `NEBIUS_API_KEY` | your real key from `backend/.env` |
 | `LABELLENS_CORS_ORIGINS` | your Vercel URL once you have it (step 2), e.g. `https://labellens.vercel.app` — comma-separate more than one |
 | `LABELLENS_CORS_ORIGIN_REGEX` | optional: `https://.*\.vercel\.app` so every Vercel *preview* deploy (each gets its own random subdomain) is allowed too, not just production |
+| `LABELLENS_SEED_SECRET` | a long random secret, temporarily used to seed demo data |
 
 You won't have the Vercel URL yet on first deploy — put a placeholder
 (`http://localhost:5173` is harmless) and come back to update it after step 2. Changing
@@ -115,10 +116,19 @@ backend automatically. If you want preview deploys to work too, add the
 A fresh deploy has an empty database. To load the same demo inspections, entities, and
 cases used in development:
 
-- **Paid Render plan**: service → **Shell** tab → `python -m app.seed`.
-- **Free plan** (no Shell access): there's no built-in one-off command runner. Either
-  temporarily upgrade to run the seed once, or skip seeding and let real inspections
-  populate it — the app works fine empty, it just starts with nothing to show.
+- Set `LABELLENS_SEED_SECRET` in Render's **Environment** tab and deploy. Use a long,
+   temporary value that is not committed to Git.
+- Call the protected endpoint once from your terminal:
+
+   ```bash
+   curl -X POST \
+      -H "X-Seed-Secret: your-temporary-secret" \
+      https://YOUR-RENDER-URL.onrender.com/api/v1/admin/seed
+   ```
+
+- Confirm the response is `{"status":"ok","message":"Demo data seeded"}`.
+- Remove `LABELLENS_SEED_SECRET` from Render and redeploy. Without the variable, the
+   endpoint returns `404` and cannot be used.
 
 Reminder: `app.seed` calls `reset_database()` first, which drops every table — never
 run it against a deployment with real inspections you want to keep.
