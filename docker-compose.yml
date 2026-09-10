@@ -1,0 +1,32 @@
+services:
+  backend:
+    build: ./backend
+    environment:
+      NEBIUS_API_KEY: ${NEBIUS_API_KEY:?set NEBIUS_API_KEY in .env or the environment}
+      LABELLENS_DATABASE_URL: sqlite:////data/labellens.db
+    volumes:
+      # Evidence images, dockets and the ledger must outlive the container: losing them
+      # loses the case files.
+      - labellens-data:/data
+      - labellens-storage:/app/storage
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/system/health')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  labellens-data:
+  labellens-storage:
