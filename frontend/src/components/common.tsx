@@ -89,13 +89,16 @@ export function LabelViewer({ src, declarations, violations, highlight }: LabelV
       {boxes.map(({ field, bbox, isViolation }) => (
         <div
           key={field}
-          className={`bbox${isViolation ? "" : " bbox-found"}`}
+          className={
+            `bbox${isViolation ? "" : " bbox-found"}` +
+            (highlight === field ? " bbox-active" : "")
+          }
           style={{
             left: `${bbox.x * 100}%`,
             top: `${bbox.y * 100}%`,
             width: `${bbox.w * 100}%`,
             height: `${bbox.h * 100}%`,
-            opacity: highlight && highlight !== field ? 0.25 : 1,
+            opacity: highlight && highlight !== field ? 0.3 : 1,
           }}
         >
           <span className="bbox-label">{field.replace(/_/g, " ")}</span>

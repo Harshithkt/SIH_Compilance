@@ -75,10 +75,10 @@ rules:
     clause: "Rule 7 / Second Schedule"
     title: "Minimum numeral height for MRP declaration"
     field: mrp
-    check_type: min_height_px
+    check_type: min_height_ratio
     params:
-      min_height_px: 22
-      reference: "Approximates the Second Schedule's minimum type-size mandate (font size scales with pack size); measured in relative pixels against the detected label height, not absolute mm."
+      min_height_ratio: 0.020
+      reference: "Approximates the Second Schedule's minimum type-size mandate (type size scales with pack size). Measured as the height of the declaration's text line relative to the label image, which is scale-invariant; it is not a measurement in millimetres."
     severity: medium
     message: "MRP numerals do not meet the minimum height mandated for this pack size."
 

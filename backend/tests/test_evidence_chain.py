@@ -15,6 +15,7 @@ LABEL_LINES = [
     "Net Quantity: 200 g",
     "MRP: Rs. 45.00",
     "Mfg Date: 07/2026",
+    "Best Before: 07/2027",
     "Consumer Care: care@sunrisefoods.example",
     "FSSAI Lic No: 11522998000123",
 ]

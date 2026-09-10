@@ -518,6 +518,8 @@ tbody tr:last-child td {
   background: rgba(26, 127, 75, 0.1);
 }
 
+/* Labels are hidden until the matching declaration row is hovered — showing all of them
+   at once covers the very text they point at. */
 .bbox-label {
   position: absolute;
   top: -17px;
@@ -530,6 +532,16 @@ tbody tr:last-child td {
   background: rgba(171, 21, 38, 0.92);
   white-space: nowrap;
   line-height: 1.5;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.bbox-active {
+  border-width: 2.5px;
+}
+
+.bbox-active .bbox-label {
+  opacity: 1;
 }
 
 .bbox-found .bbox-label {

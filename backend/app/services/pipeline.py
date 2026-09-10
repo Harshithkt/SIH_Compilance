@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.config import IMAGES_DIR, settings
 from app.models import Declaration as DeclarationRow
 from app.models import Entity, Scan, Violation
-from app.services import evidence_chain, extraction, ocr, quality, rule_engine
+from app.services import evidence_chain, extraction, layout, ocr, quality, rule_engine
 
 
 class QualityGateRejected(Exception):
@@ -56,6 +56,27 @@ def _resolve_entity(db: Session, declarations: dict, name: str | None) -> Entity
     return entity
 
 
+def _attach_measured_geometry(boxes: list[ocr.TextBox], image_path: Path) -> list[ocr.TextBox]:
+    """Fill in line geometry measured from the photograph for boxes that have none.
+
+    Detected lines are matched to recognised lines by reading order, and only when the
+    counts agree — a mismatch means the association would be guesswork, and a box
+    pointing at the wrong part of the label is worse than no box at all.
+    """
+    if not boxes or all(box.bbox for box in boxes):
+        return boxes
+
+    detected = layout.detect_text_lines(image_path)
+    if len(detected) != len(boxes):
+        return boxes
+
+    for box, line in zip(boxes, detected):
+        if box.bbox is None:
+            box.bbox = line["bbox"]
+            box.height_px = line["height_px"]
+    return boxes
+
+
 def run_scan(
     db: Session,
     *,
@@ -85,6 +106,7 @@ def run_scan(
         provider = ocr.get_provider(provider_preference or settings.ocr_provider)
         boxes = provider.extract(str(image_path), lang=lang)
 
+    boxes = _attach_measured_geometry(boxes, image_path)
     declarations = extraction.extract_declarations(boxes)
     version = rule_version or settings.active_rule_version
     rule_pack = rule_engine.get_rule_pack(version)

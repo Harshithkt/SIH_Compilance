@@ -20,7 +20,7 @@ from dataclasses import dataclass
 @dataclass
 class TextBox:
     text: str
-    bbox: dict  # {x, y, w, h} relative 0-1 to image dimensions
+    bbox: dict | None  # {x, y, w, h} relative 0-1; None when the position is unknown
     confidence: float
     height_px: float | None = None
 
@@ -152,18 +152,14 @@ class ManualTextProvider(OCRProvider):
     name = "manual"
 
     def extract_from_text(self, raw_text: str) -> list[TextBox]:
-        boxes = []
-        lines = [ln for ln in raw_text.splitlines() if ln.strip()]
-        for i, line in enumerate(lines):
-            boxes.append(
-                TextBox(
-                    text=line.strip(),
-                    bbox={"x": 0.1, "y": 0.05 + i * 0.08, "w": 0.8, "h": 0.06},
-                    confidence=1.0,
-                    height_px=28.0,
-                )
-            )
-        return boxes
+        """Typed entry carries no coordinates. Boxes are left empty here and measured
+        from the photograph by the layout pass, never invented.
+        """
+        return [
+            TextBox(text=line.strip(), bbox=None, confidence=1.0, height_px=None)
+            for line in raw_text.splitlines()
+            if line.strip()
+        ]
 
     def extract(self, image_path: str, lang: str = "en") -> list[TextBox]:
         return []

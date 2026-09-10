@@ -93,16 +93,20 @@ def _check_regex(decl: Declaration | None, params: dict) -> bool:
 
 
 def _check_min_height(decl: Declaration | None, params: dict) -> bool | None:
-    """None means 'could not be measured' — distinct from 'too small'.
+    """Type size as a fraction of the label height, not as absolute pixels.
 
-    A declaration that was read without coordinates cannot be measured, and an
-    unmeasurable check must never be reported as a contravention.
+    The Second Schedule ties minimum height to pack size, and a photograph's pixel scale
+    depends on how close the officer stood — so an absolute pixel threshold would make
+    the verdict depend on camera distance. The measured line height relative to the
+    image is the scale-invariant equivalent.
+
+    None means 'could not be measured' — distinct from 'too small'. A declaration read
+    without coordinates cannot be measured, and an unmeasurable check must never be
+    reported as a contravention.
     """
-    if not decl or not decl.present:
-        return False
-    if decl.height_px is None:
+    if not decl or not decl.bbox or "h" not in decl.bbox:
         return None
-    return decl.height_px >= params["min_height_px"]
+    return decl.bbox["h"] >= params["min_height_ratio"]
 
 
 def evaluate(
@@ -128,7 +132,12 @@ def evaluate(
             passed = _check_presence(decl)
         elif check_type == "regex":
             passed = _check_regex(decl, rule["params"])
-        elif check_type == "min_height_px":
+        elif check_type == "min_height_ratio":
+            # A declaration that is not on the pack at all is already caught by its own
+            # presence or format rule; reporting it a second time as undersized print
+            # would misdescribe the finding.
+            if not decl or not decl.present:
+                continue
             passed = _check_min_height(decl, rule["params"])
         elif check_type == "numeric_ratio":
             # Best-effort sanity check only; never blocks a GO verdict on its own.
@@ -142,7 +151,7 @@ def evaluate(
                     "rule_id": rule["id"],
                     "clause": rule["clause"],
                     "title": rule["title"],
-                    "reason": "Could not be measured from this capture — no coordinates were recorded for the declaration.",
+                    "reason": "Could not be measured from this capture — the declaration's position on the label was not established.",
                 }
             )
             continue
