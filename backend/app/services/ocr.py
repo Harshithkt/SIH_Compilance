@@ -1,0 +1,180 @@
+"""Pluggable text-recognition providers.
+
+Three interchangeable backends behind one interface:
+  - NebiusVisionProvider: a vision-language model on Nebius Token Factory, which reads
+    English + Devanagari label text with bounding boxes. This is the default.
+  - TesseractOCRProvider: local OCR, for offline field use where no network is available.
+  - ManualTextProvider: officer-typed text, which also backs the manual-override workflow.
+
+All three return the same `list[TextBox]`, so the extraction and rule-engine layers never
+learn which one produced the text — and the compliance verdict stays deterministic
+regardless of backend.
+"""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+
+@dataclass
+class TextBox:
+    text: str
+    bbox: dict  # {x, y, w, h} relative 0-1 to image dimensions
+    confidence: float
+    height_px: float | None = None
+
+
+class OCRProvider(ABC):
+    name: str
+
+    @abstractmethod
+    def extract(self, image_path: str, lang: str = "en") -> list[TextBox]:
+        ...
+
+
+class NebiusVisionProvider(OCRProvider):
+    """Vision-language text recognition via Nebius Token Factory.
+
+    Strong on Devanagari and on the low-contrast, curved, glossy packs that trip
+    classical OCR. Requires network + NEBIUS_API_KEY; callers fall back to Tesseract
+    for offline field mode.
+    """
+
+    name = "nebius-vision"
+
+    def __init__(self):
+        from app.services import nebius
+
+        if not nebius.is_configured():
+            raise RuntimeError("NEBIUS_API_KEY not set")
+        self._nebius = nebius
+
+    def extract(self, image_path: str, lang: str = "en") -> list[TextBox]:
+        lines = self._nebius.read_label(image_path, lang=lang)
+        boxes: list[TextBox] = []
+        for line in lines:
+            text = (line.get("text") or "").strip()
+            if not text:
+                continue
+            bbox = line.get("bbox") or {}
+            normalised = {
+                "x": float(bbox.get("x", 0.0)),
+                "y": float(bbox.get("y", 0.0)),
+                "w": float(bbox.get("w", 0.0)),
+                "h": float(bbox.get("h", 0.0)),
+            }
+            boxes.append(
+                TextBox(
+                    text=text,
+                    bbox=normalised,
+                    confidence=float(line.get("confidence", 0.0)),
+                    height_px=self._height_px(image_path, normalised["h"]),
+                )
+            )
+        return boxes
+
+    @staticmethod
+    def _height_px(image_path: str, relative_height: float) -> float | None:
+        if relative_height <= 0:
+            return None
+        try:
+            from PIL import Image
+
+            with Image.open(image_path) as img:
+                return relative_height * img.size[1]
+        except Exception:
+            return None
+
+
+class TesseractOCRProvider(OCRProvider):
+    """Real OCR via pytesseract, used when the tesseract binary + language packs
+    (eng, hin) are installed on the host. Falls back gracefully if unavailable.
+    """
+
+    name = "tesseract"
+
+    def __init__(self):
+        try:
+            import pytesseract  # noqa: F401
+            from PIL import Image  # noqa: F401
+        except ImportError as exc:  # pragma: no cover
+            raise RuntimeError("pytesseract/Pillow not installed") from exc
+
+    def extract(self, image_path: str, lang: str = "en") -> list[TextBox]:
+        import pytesseract
+        from PIL import Image
+
+        lang_map = {"en": "eng", "hi": "hin"}
+        image = Image.open(image_path)
+        w, h = image.size
+        data = pytesseract.image_to_data(
+            image, lang=lang_map.get(lang, "eng"), output_type=pytesseract.Output.DICT
+        )
+        boxes: list[TextBox] = []
+        for i, text in enumerate(data["text"]):
+            if not text.strip():
+                continue
+            conf = float(data["conf"][i]) if data["conf"][i] != "-1" else 0.0
+            boxes.append(
+                TextBox(
+                    text=text.strip(),
+                    bbox={
+                        "x": data["left"][i] / w,
+                        "y": data["top"][i] / h,
+                        "w": data["width"][i] / w,
+                        "h": data["height"][i] / h,
+                    },
+                    confidence=conf / 100.0,
+                    height_px=float(data["height"][i]),
+                )
+            )
+        return boxes
+
+
+class ManualTextProvider(OCRProvider):
+    """Fallback provider: treats officer-supplied raw text (one declaration per line,
+    as 'field: value') as the OCR output, with synthetic bounding boxes. Used for
+    demo/dev environments without a tesseract install, and for the manual-override
+    field-capture flow described in the memo.
+    """
+
+    name = "manual"
+
+    def extract_from_text(self, raw_text: str) -> list[TextBox]:
+        boxes = []
+        lines = [ln for ln in raw_text.splitlines() if ln.strip()]
+        for i, line in enumerate(lines):
+            boxes.append(
+                TextBox(
+                    text=line.strip(),
+                    bbox={"x": 0.1, "y": 0.05 + i * 0.08, "w": 0.8, "h": 0.06},
+                    confidence=1.0,
+                    height_px=28.0,
+                )
+            )
+        return boxes
+
+    def extract(self, image_path: str, lang: str = "en") -> list[TextBox]:
+        return []
+
+
+def get_provider(prefer: str = "auto") -> OCRProvider:
+    """Resolve a provider. 'auto' prefers the Nebius vision model, falls back to local
+    Tesseract when there is no API key (offline field mode), then to manual entry.
+    """
+    if prefer in ("nebius", "auto"):
+        try:
+            return NebiusVisionProvider()
+        except RuntimeError:
+            if prefer == "nebius":
+                raise
+
+    if prefer in ("tesseract", "auto"):
+        try:
+            return TesseractOCRProvider()
+        except RuntimeError:
+            if prefer == "tesseract":
+                raise
+
+    return ManualTextProvider()

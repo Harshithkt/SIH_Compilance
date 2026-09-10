@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local data — evidence images, dockets and the dev database are not source
+backend/storage/
+backend/*.db
+
+# Secrets
+.env
+*.env
+!*.env.example
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# OS
+.DS_Store
