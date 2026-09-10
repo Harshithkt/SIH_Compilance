@@ -11,6 +11,7 @@ const STRINGS = {
     "nav.scans": "Inspections",
     "nav.ledger": "Evidence ledger",
     "nav.rules": "Rule packs",
+    "nav.report": "Monthly report",
 
     "capture.title": "New inspection",
     "capture.subtitle":
@@ -77,6 +78,18 @@ const STRINGS = {
     "ledger.scan": "Inspection",
     "ledger.hash": "Entry hash",
 
+    "report.title": "Monthly compliance report",
+    "report.subtitle":
+      "Inspection activity for the period, drawn from committed ledger records and reported with the integrity status of the chain behind them.",
+    "report.inspections": "Inspections",
+    "report.rate": "Non-compliance",
+    "report.entities": "Entities with findings",
+    "report.clauses": "Contraventions by clause",
+    "report.priority": "Priority entities",
+    "report.officers": "Inspections by officer",
+    "report.versions": "Rule versions applied",
+    "report.raw": "Open raw data",
+
     "rules.title": "Rule packs",
     "rules.subtitle":
       "Clause-by-clause encoding of the LMPC Rules, 2011. Every verdict is pinned to the version in force on the inspection date.",
@@ -102,6 +115,7 @@ const STRINGS = {
     "nav.scans": "निरीक्षण अभिलेख",
     "nav.ledger": "साक्ष्य बही",
     "nav.rules": "नियम संस्करण",
+    "nav.report": "मासिक प्रतिवेदन",
 
     "capture.title": "नया निरीक्षण",
     "capture.subtitle":
@@ -167,6 +181,18 @@ const STRINGS = {
     "ledger.entry": "प्रविष्टि",
     "ledger.scan": "निरीक्षण",
     "ledger.hash": "प्रविष्टि हैश",
+
+    "report.title": "मासिक अनुपालन प्रतिवेदन",
+    "report.subtitle":
+      "अवधि की निरीक्षण गतिविधि, बही में दर्ज अभिलेखों से संकलित तथा श्रृंखला की अखंडता स्थिति सहित।",
+    "report.inspections": "निरीक्षण",
+    "report.rate": "अननुपालन दर",
+    "report.entities": "उल्लंघनकर्ता इकाइयाँ",
+    "report.clauses": "नियमानुसार उल्लंघन",
+    "report.priority": "प्राथमिकता इकाइयाँ",
+    "report.officers": "अधिकारीवार निरीक्षण",
+    "report.versions": "लागू नियम संस्करण",
+    "report.raw": "मूल आँकड़े खोलें",
 
     "rules.title": "नियम संस्करण",
     "rules.subtitle":

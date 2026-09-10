@@ -3,6 +3,7 @@ import { useI18n } from "./i18n";
 import Capture from "./pages/Capture";
 import Entity from "./pages/Entity";
 import Ledger from "./pages/Ledger";
+import Report from "./pages/Report";
 import Rules from "./pages/Rules";
 import ScanDetail from "./pages/ScanDetail";
 import Scans from "./pages/Scans";
@@ -27,6 +28,7 @@ export default function App() {
             <NavLink to="/worklist">{t("nav.worklist")}</NavLink>
             <NavLink to="/scans">{t("nav.scans")}</NavLink>
             <NavLink to="/ledger">{t("nav.ledger")}</NavLink>
+            <NavLink to="/report">{t("nav.report")}</NavLink>
             <NavLink to="/rules">{t("nav.rules")}</NavLink>
           </nav>
 
@@ -49,6 +51,7 @@ export default function App() {
           <Route path="/scans" element={<Scans />} />
           <Route path="/scans/:scanId" element={<ScanDetail />} />
           <Route path="/ledger" element={<Ledger />} />
+          <Route path="/report" element={<Report />} />
           <Route path="/rules" element={<Rules />} />
         </Routes>
       </main>

@@ -1,6 +1,7 @@
 import type {
   ChainVerification,
   EntityDetail,
+  MonthlyReport,
   Override,
   LedgerRow,
   Rule,
@@ -127,6 +128,12 @@ export const api = {
   entity: (id: string) => request<EntityDetail>(`/entities/${id}`),
 
   stats: () => request<Stats>("/stats"),
+
+  monthlyReport: (year: number, month: number) =>
+    request<MonthlyReport>(`/reports/monthly?year=${year}&month=${month}`),
+
+  monthlyReportUrl: (year: number, month: number) =>
+    `${BASE}/reports/monthly?year=${year}&month=${month}`,
 
   ledger: () => request<LedgerRow[]>("/ledger"),
 

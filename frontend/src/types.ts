@@ -166,3 +166,28 @@ export interface EntityDetail {
   top_clauses: { clause: string; count: number }[];
   scans: ScanSummary[];
 }
+
+export interface MonthlyReport {
+  period: { year: number; month: number; label: string; from: string; to: string };
+  totals: {
+    inspections: number;
+    non_compliant: number;
+    non_compliance_rate: number;
+    findings: number;
+    entities_with_findings: number;
+  };
+  verdicts: Record<string, number>;
+  rule_versions_applied: Record<string, number>;
+  inspections_by_officer: { officer: string; inspections: number }[];
+  clause_breakdown: { clause: string; title: string; count: number }[];
+  priority_entities: {
+    name: string;
+    address: string | null;
+    risk_score: number;
+    findings_in_period: number;
+    repeat_offender: boolean;
+  }[];
+  evidence_integrity: ChainVerification;
+  generated_at: string;
+  note: string;
+}

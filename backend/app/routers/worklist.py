@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -5,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.database import get_db
 from app.models import Entity, Scan
 from app.schemas import EntityOut, ScanSummaryOut
-from app.services import risk_scoring
+from app.services import compliance_report, risk_scoring
 
 router = APIRouter(prefix="/api/v1", tags=["enforcement"])
 
@@ -58,6 +60,21 @@ def get_entity(entity_id: str, db: Session = Depends(get_db)):
             for s in sorted(entity.scans, key=lambda s: s.captured_at, reverse=True)
         ],
     }
+
+
+@router.get("/reports/monthly")
+def monthly_report(
+    year: int | None = None,
+    month: int | None = None,
+    db: Session = Depends(get_db),
+):
+    """Periodic compliance report for the controller's office."""
+    now = datetime.now(timezone.utc)
+    target_year = year or now.year
+    target_month = month or now.month
+    if not 1 <= target_month <= 12:
+        raise HTTPException(status_code=422, detail="month must be between 1 and 12")
+    return compliance_report.build_report(db, target_year, target_month)
 
 
 @router.get("/stats")
