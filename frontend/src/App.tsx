@@ -1,6 +1,7 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import { useI18n } from "./i18n";
 import Capture from "./pages/Capture";
+import Entity from "./pages/Entity";
 import Ledger from "./pages/Ledger";
 import Rules from "./pages/Rules";
 import ScanDetail from "./pages/ScanDetail";
@@ -44,6 +45,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Capture />} />
           <Route path="/worklist" element={<Worklist />} />
+          <Route path="/entities/:entityId" element={<Entity />} />
           <Route path="/scans" element={<Scans />} />
           <Route path="/scans/:scanId" element={<ScanDetail />} />
           <Route path="/ledger" element={<Ledger />} />

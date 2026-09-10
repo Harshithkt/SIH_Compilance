@@ -1,5 +1,6 @@
 import type {
   ChainVerification,
+  EntityDetail,
   Override,
   LedgerRow,
   Rule,
@@ -122,6 +123,8 @@ export const api = {
   listOverrides: (scanId: string) => request<Override[]>(`/scans/${scanId}/overrides`),
 
   worklist: () => request<WorklistItem[]>("/worklist"),
+
+  entity: (id: string) => request<EntityDetail>(`/entities/${id}`),
 
   stats: () => request<Stats>("/stats"),
 

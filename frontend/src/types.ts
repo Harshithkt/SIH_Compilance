@@ -155,3 +155,14 @@ export interface Override {
   reason: string;
   created_at: string;
 }
+
+export interface EntityDetail {
+  entity: WorklistItem["entity"];
+  risk_score: number;
+  repeat_offender: boolean;
+  scan_count: number;
+  violation_count: number;
+  high_severity_count: number;
+  top_clauses: { clause: string; count: number }[];
+  scans: ScanSummary[];
+}

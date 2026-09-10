@@ -69,7 +69,7 @@ export default function Worklist() {
                   <tr key={item.entity.id}>
                     <td className="muted">{index + 1}</td>
                     <td>
-                      <Link to={`/scans?entity=${item.entity.id}`}>
+                      <Link to={`/entities/${item.entity.id}`}>
                         <strong>{item.entity.name}</strong>
                       </Link>
                       {item.repeat_offender && (
