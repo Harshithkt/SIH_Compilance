@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     nebius_text_model: str = "meta-llama/Llama-3.3-70B-Instruct"
     nebius_timeout_seconds: float = 90.0
     ocr_provider: str = "auto"  # auto | nebius | tesseract | manual
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    # A platform like Vercel gives every preview deploy its own subdomain, which a fixed
+    # origin list can't enumerate in advance — set e.g.
+    # LABELLENS_CORS_ORIGIN_REGEX=https://.*\.vercel\.app to allow all of them alongside
+    # the exact origins above. Left unset, only cors_origins applies.
+    cors_origin_regex: str | None = None
 
     # Case-management response windows (calendar days from officer confirmation).
     # A minor (FIX) finding gets a correction notice; a serious (REVIEW) finding opens

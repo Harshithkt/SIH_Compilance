@@ -1,0 +1,36 @@
+# Render Blueprint for the LabelLens backend.
+#
+# Optional accelerator: in the Render dashboard, "New +" -> "Blueprint", point it at
+# this repo, and it proposes the service below instead of you clicking through the
+# manual "New Web Service" flow. If the blueprint import errors on a field name (Render's
+# schema has changed shape over time — `runtime` used to be `env`), fall back to the
+# manual steps in docs/DEPLOY.md; they always work.
+#
+# This does NOT cover the frontend — deploy that on Vercel per docs/DEPLOY.md.
+
+services:
+  - type: web
+    name: labellens-backend
+    runtime: docker
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    plan: free # no persistent disk on Free — see docs/DEPLOY.md before relying on this for real data
+    healthCheckPath: /api/v1/system/health
+    envVars:
+      - key: NEBIUS_API_KEY
+        sync: false # set the real value in the Render dashboard; never commit it here
+      - key: LABELLENS_CORS_ORIGINS
+        value: http://localhost:5173 # replace with your Vercel URL once you have it
+      - key: LABELLENS_CORS_ORIGIN_REGEX
+        value: "" # e.g. https://.*\.vercel\.app to allow every Vercel preview deploy too
+
+    # Uncomment once you've upgraded `plan` above off Free (disks require a paid
+    # instance) — this is what makes the database and evidence images survive a
+    # redeploy instead of resetting to empty every time:
+    # disk:
+    #   name: labellens-storage
+    #   mountPath: /app/storage
+    #   sizeGB: 1
+    # and add an env var alongside the ones above:
+    #   - key: LABELLENS_DATABASE_URL
+    #     value: sqlite:////app/storage/labellens.db
