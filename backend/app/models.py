@@ -66,9 +66,22 @@ class Scan(Base):
     violations: Mapped[list["Violation"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan"
     )
-    ledger_entry: Mapped["LedgerEntry | None"] = relationship(
-        back_populates="scan", uselist=False, cascade="all, delete-orphan"
+    # A scan can hold several entries: the original commit, plus one per officer
+    # correction. Corrections are appended, never written over.
+    ledger_entries: Mapped[list["LedgerEntry"]] = relationship(
+        back_populates="scan",
+        cascade="all, delete-orphan",
+        order_by="LedgerEntry.sequence",
     )
+
+    @property
+    def ledger_entry(self) -> "LedgerEntry | None":
+        """The entry that commits the record as it currently stands."""
+        return self.ledger_entries[-1] if self.ledger_entries else None
+
+    @property
+    def amendment_count(self) -> int:
+        return max(0, len(self.ledger_entries) - 1)
 
 
 class Declaration(Base):
@@ -106,19 +119,25 @@ class Violation(Base):
 
 
 class LedgerEntry(Base):
-    """Append-only hash-chained evidence ledger. One entry per scan, chained to the prior entry."""
+    """One committed state of one scan, chained to the entry before it.
+
+    The entry stores the payload it committed, not merely its hash, so the ledger is the
+    authoritative history: an amended record keeps its original entry intact and
+    verifiable rather than being rewritten.
+    """
 
     __tablename__ = "ledger_entries"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
-    scan_id: Mapped[str] = mapped_column(ForeignKey("scans.id"), unique=True)
+    scan_id: Mapped[str] = mapped_column(ForeignKey("scans.id"), index=True)
     sequence: Mapped[int] = mapped_column(Integer, unique=True, autoincrement=True)
     prev_hash: Mapped[str] = mapped_column(String)
+    payload: Mapped[dict] = mapped_column(JSON)
     payload_hash: Mapped[str] = mapped_column(String)
     entry_hash: Mapped[str] = mapped_column(String, unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
-    scan: Mapped["Scan"] = relationship(back_populates="ledger_entry")
+    scan: Mapped["Scan"] = relationship(back_populates="ledger_entries")
 
 
 class ManualOverride(Base):

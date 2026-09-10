@@ -19,7 +19,7 @@ def _load_scan(db: Session, scan_id: str) -> Scan:
         .options(
             selectinload(Scan.declarations),
             selectinload(Scan.violations),
-            selectinload(Scan.ledger_entry),
+            selectinload(Scan.ledger_entries),
             selectinload(Scan.entity),
         )
         .where(Scan.id == scan_id)

@@ -88,17 +88,24 @@ def _last_entry(db: Session) -> LedgerEntry | None:
 
 
 def append_scan(db: Session, scan: Scan) -> LedgerEntry:
+    """Commit the scan's current state as a new ledger entry.
+
+    Called on first capture and again after any officer correction: the earlier entry
+    stays in the chain, so the record's history is preserved rather than overwritten.
+    """
     last = _last_entry(db)
     sequence = (last.sequence + 1) if last else 1
     prev_hash = last.entry_hash if last else GENESIS_HASH
 
-    p_hash = payload_hash(canonical_payload(scan))
+    payload = canonical_payload(scan)
+    p_hash = payload_hash(payload)
     e_hash = entry_hash(prev_hash, p_hash, sequence)
 
     entry = LedgerEntry(
         scan_id=scan.id,
         sequence=sequence,
         prev_hash=prev_hash,
+        payload=payload,
         payload_hash=p_hash,
         entry_hash=e_hash,
         created_at=datetime.now(timezone.utc),
@@ -109,53 +116,69 @@ def append_scan(db: Session, scan: Scan) -> LedgerEntry:
 
 
 def verify_chain(db: Session) -> dict:
-    """Recompute the whole chain. Reports the first sequence where the recorded hash
-    diverges — whether because a scan record was edited, or the stored image no longer
-    matches the hash committed at inspection time.
+    """Recompute the whole chain and reconcile it against the live records.
+
+    Three things are checked, and the first failure names the entry it occurred at:
+      1. Each entry is internally consistent and correctly linked to the one before it.
+      2. Each scan's current state matches its most recent entry — so a record edited
+         outside the ledger is caught, while a properly appended correction is not.
+      3. Each evidence image still hashes to the value committed at capture.
     """
     entries = db.execute(select(LedgerEntry).order_by(LedgerEntry.sequence)).scalars().all()
     prev_hash = GENESIS_HASH
 
-    for entry in entries:
-        scan = entry.scan
-        expected_payload = payload_hash(canonical_payload(scan))
+    def broken(sequence: int, detail: str) -> dict:
+        return {
+            "valid": False,
+            "checked_entries": len(entries),
+            "broken_at_sequence": sequence,
+            "detail": detail,
+        }
 
+    for entry in entries:
         if entry.prev_hash != prev_hash:
-            return {
-                "valid": False,
-                "checked_entries": len(entries),
-                "broken_at_sequence": entry.sequence,
-                "detail": f"Chain link broken at entry {entry.sequence}: prev_hash does not match entry {entry.sequence - 1}.",
-            }
-        if expected_payload != entry.payload_hash:
-            return {
-                "valid": False,
-                "checked_entries": len(entries),
-                "broken_at_sequence": entry.sequence,
-                "detail": f"Record tampering detected at entry {entry.sequence}: scan {scan.id} no longer hashes to its committed payload.",
-            }
+            return broken(
+                entry.sequence,
+                f"Chain link broken at entry {entry.sequence}: it does not follow entry {entry.sequence - 1}.",
+            )
+        if payload_hash(entry.payload) != entry.payload_hash:
+            return broken(
+                entry.sequence,
+                f"Entry {entry.sequence} has been altered: its stored record no longer matches its committed hash.",
+            )
         if entry_hash(entry.prev_hash, entry.payload_hash, entry.sequence) != entry.entry_hash:
-            return {
-                "valid": False,
-                "checked_entries": len(entries),
-                "broken_at_sequence": entry.sequence,
-                "detail": f"Entry hash mismatch at entry {entry.sequence}.",
-            }
+            return broken(entry.sequence, f"Entry hash mismatch at entry {entry.sequence}.")
+
+        prev_hash = entry.entry_hash
+
+    for scan in db.execute(select(Scan)).scalars().all():
+        latest = scan.ledger_entry
+        if latest is None:
+            return broken(0, f"Scan {scan.id} exists outside the ledger — it was never committed.")
+
+        if canonical_payload(scan) != latest.payload:
+            return broken(
+                latest.sequence,
+                f"Record tampering detected: scan {scan.id} no longer matches ledger entry "
+                f"{latest.sequence}, and no correction was appended to account for the change.",
+            )
 
         image_path = Path(scan.image_path)
         if image_path.exists() and sha256_file(image_path) != scan.image_sha256:
-            return {
-                "valid": False,
-                "checked_entries": len(entries),
-                "broken_at_sequence": entry.sequence,
-                "detail": f"Evidence image for scan {scan.id} has been modified since capture — file hash does not match the hash committed at inspection time.",
-            }
+            return broken(
+                latest.sequence,
+                f"Evidence image for scan {scan.id} has been modified since capture — "
+                "file hash does not match the hash committed at inspection time.",
+            )
 
-        prev_hash = entry.entry_hash
+    amendments = len(entries) - len({entry.scan_id for entry in entries})
+    detail = f"All {len(entries)} ledger entries verified; chain is intact from genesis."
+    if amendments:
+        detail += f" {amendments} of them record officer corrections appended to earlier inspections."
 
     return {
         "valid": True,
         "checked_entries": len(entries),
         "broken_at_sequence": None,
-        "detail": f"All {len(entries)} ledger entries verified; chain is intact from genesis.",
+        "detail": detail,
     }

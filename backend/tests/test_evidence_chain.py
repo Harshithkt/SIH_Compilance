@@ -100,6 +100,57 @@ def test_editing_the_evidence_image_breaks_the_chain(db, label_image):
     assert "modified since capture" in result["detail"]
 
 
+def test_officer_correction_is_appended_and_keeps_the_chain_valid(db, label_image):
+    """A correction must extend the ledger, not overwrite it: the original commit stays
+    verifiable, and the chain still reconciles against the corrected record."""
+    from app.services import rule_engine
+
+    scan = add_scan(db, label_image())
+    original_entry = scan.ledger_entry.sequence
+
+    declaration = next(d for d in scan.declarations if d.field == "consumer_care")
+    declaration.value = "care@corrected.example, 1800-000-0000"
+    declaration.present = True
+    declaration.status = "officer_verified"
+    db.flush()
+
+    pack = rule_engine.get_rule_pack(scan.rule_version)
+    verdict = rule_engine.evaluate(
+        pack,
+        {
+            d.field: rule_engine.Declaration(
+                field=d.field, value=d.value, present=d.present, bbox=d.bbox
+            )
+            for d in scan.declarations
+        },
+        {"is_food_item": scan.is_food_item, "is_imported": scan.is_imported},
+    )
+    scan.verdict = verdict.result
+    db.flush()
+    evidence_chain.append_scan(db, scan)
+    db.commit()
+
+    assert len(scan.ledger_entries) == 2
+    assert scan.amendment_count == 1
+    assert scan.ledger_entries[0].sequence == original_entry
+    assert evidence_chain.verify_chain(db)["valid"] is True
+
+
+def test_original_entry_survives_a_correction(db, label_image):
+    """The pre-correction record must remain readable from the ledger, or the audit
+    trail would show only the amended version."""
+    scan = add_scan(db, label_image())
+    before = scan.ledger_entries[0].payload
+
+    scan.verdict = "REVIEW"
+    db.flush()
+    evidence_chain.append_scan(db, scan)
+    db.commit()
+
+    assert scan.ledger_entries[0].payload == before
+    assert scan.ledger_entries[0].payload["verdict"] != scan.ledger_entries[1].payload["verdict"]
+
+
 def test_payload_hash_is_independent_of_row_order(db, label_image):
     """Row order from the database must not affect the hash, or a verification run on
     another machine could report tampering where none occurred."""

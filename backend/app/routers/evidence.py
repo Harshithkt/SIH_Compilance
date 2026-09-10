@@ -31,8 +31,9 @@ def list_ledger(limit: int = 200, db: Session = Depends(get_db)):
             "payload_hash": e.payload_hash,
             "entry_hash": e.entry_hash,
             "created_at": e.created_at,
-            "verdict": e.scan.verdict if e.scan else None,
-            "officer_name": e.scan.officer_name if e.scan else None,
+            "verdict": e.payload.get("verdict"),
+            "officer_name": e.payload.get("officer_name"),
+            "is_amendment": bool(e.scan and e.scan.ledger_entries and e.scan.ledger_entries[0].sequence != e.sequence),
         }
         for e in entries
     ]
@@ -56,7 +57,7 @@ def get_docket(scan_id: str, db: Session = Depends(get_db)):
         .options(
             selectinload(Scan.declarations),
             selectinload(Scan.violations),
-            selectinload(Scan.ledger_entry),
+            selectinload(Scan.ledger_entries),
             selectinload(Scan.entity),
         )
         .where(Scan.id == scan_id)

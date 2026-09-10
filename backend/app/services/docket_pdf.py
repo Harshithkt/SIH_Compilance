@@ -438,6 +438,18 @@ def build_docket(scan: Scan) -> Path:
                 styles,
             )
         )
+        if scan.amendment_count:
+            story.append(Spacer(1, 2 * mm))
+            story.append(
+                Paragraph(
+                    f"<b>This record has been amended {scan.amendment_count} time(s).</b> Each "
+                    "amendment was appended to the ledger as a further entry; the original commit "
+                    f"(entry no. {scan.ledger_entries[0].sequence}) remains in the ledger unaltered "
+                    "and the corrections are itemised in the manual-override log.",
+                    styles["small"],
+                )
+            )
+
         story.append(Spacer(1, 2 * mm))
         story.append(
             Paragraph(
