@@ -51,50 +51,25 @@ class NebiusVisionProvider(OCRProvider):
         self._nebius = nebius
 
     def extract(self, image_path: str, lang: str = "en") -> list[TextBox]:
-        lines = self._nebius.read_label(image_path, lang=lang)
-        boxes: list[TextBox] = []
-        for line in lines:
-            text = (line.get("text") or "").strip()
-            if not text:
-                continue
-            bbox = self._valid_bbox(line.get("bbox"))
-            boxes.append(
-                TextBox(
-                    text=text,
-                    bbox=bbox,
-                    confidence=float(line.get("confidence") or 0.0),
-                    height_px=self._height_px(image_path, bbox["h"]) if bbox else None,
-                )
-            )
-        return boxes
+        """Return recognised text only.
 
-    @staticmethod
-    def _valid_bbox(raw: object) -> dict | None:
-        """Vision models do not always ground their output. A missing or degenerate box
-        is returned as None rather than a zero-sized rectangle: an evidence docket must
-        say "not located on label" instead of pointing at the wrong place.
+        Coordinates are deliberately discarded. Benchmarked against geometry measured
+        from the same photographs, the boxes these models return are estimates dressed
+        as measurements — identical line heights and perfectly uniform spacing, drifting
+        progressively down the label (up to ~8% of image height at the bottom, enough to
+        crop the wrong line). Position is established by app.services.layout instead,
+        which measures it from the pixels.
         """
-        if not isinstance(raw, dict):
-            return None
-        try:
-            box = {key: float(raw.get(key, 0.0)) for key in ("x", "y", "w", "h")}
-        except (TypeError, ValueError):
-            return None
-        if box["w"] <= 0.001 or box["h"] <= 0.001:
-            return None
-        if not all(0.0 <= box[key] <= 1.0 for key in ("x", "y", "w", "h")):
-            return None
-        return box
-
-    @staticmethod
-    def _height_px(image_path: str, relative_height: float) -> float | None:
-        try:
-            from PIL import Image
-
-            with Image.open(image_path) as img:
-                return relative_height * img.size[1]
-        except Exception:
-            return None
+        return [
+            TextBox(
+                text=(line.get("text") or "").strip(),
+                bbox=None,
+                confidence=float(line.get("confidence") or 0.0),
+                height_px=None,
+            )
+            for line in self._nebius.read_label(image_path, lang=lang)
+            if (line.get("text") or "").strip()
+        ]
 
 
 class TesseractOCRProvider(OCRProvider):
