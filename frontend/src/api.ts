@@ -1,5 +1,6 @@
 import type {
   ChainVerification,
+  Override,
   LedgerRow,
   Rule,
   RuleDiff,
@@ -112,11 +113,13 @@ export const api = {
     scanId: string,
     body: { declaration_id: string; officer_name: string; new_value: string; reason: string },
   ) =>
-    request<unknown>(`/scans/${scanId}/overrides`, {
+    request<Override>(`/scans/${scanId}/overrides`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
+
+  listOverrides: (scanId: string) => request<Override[]>(`/scans/${scanId}/overrides`),
 
   worklist: () => request<WorklistItem[]>("/worklist"),
 

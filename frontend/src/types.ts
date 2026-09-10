@@ -145,3 +145,13 @@ export interface RuleDiff {
   target_violations: Violation[];
   note: string;
 }
+
+export interface Override {
+  id: string;
+  declaration_id: string;
+  officer_name: string;
+  old_value: string | null;
+  new_value: string | null;
+  reason: string;
+  created_at: string;
+}

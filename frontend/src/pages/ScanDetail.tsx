@@ -12,7 +12,9 @@ import {
   shortHash,
 } from "../components/common";
 import { fieldLabel, useI18n } from "../i18n";
-import type { RuleDiff, RuleVersionSummary, Scan } from "../types";
+import type { Declaration, Override, RuleDiff, RuleVersionSummary, Scan } from "../types";
+
+const OFFICER_KEY = "labellens.officer";
 
 export default function ScanDetail() {
   const { scanId } = useParams<{ scanId: string }>();
@@ -25,16 +27,52 @@ export default function ScanDetail() {
   const [explaining, setExplaining] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [overrides, setOverrides] = useState<Override[]>([]);
+  const [editing, setEditing] = useState<Declaration | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [editReason, setEditReason] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  function load() {
     if (!scanId) return;
     setError(null);
     api.getScan(scanId).then(setScan).catch((e) => setError(e.message));
+    api.listOverrides(scanId).then(setOverrides).catch(() => setOverrides([]));
+  }
+
+  useEffect(() => {
+    load();
     api
       .ruleVersions()
       .then((r) => setVersions(r.versions))
       .catch(() => setVersions([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanId]);
+
+  function startEdit(declaration: Declaration) {
+    setEditing(declaration);
+    setEditValue(declaration.value ?? "");
+    setEditReason("");
+  }
+
+  async function saveOverride() {
+    if (!scanId || !editing || !editReason.trim()) return;
+    setSaving(true);
+    try {
+      await api.overrideDeclaration(scanId, {
+        declaration_id: editing.id,
+        officer_name: localStorage.getItem(OFFICER_KEY) || "Inspecting officer",
+        new_value: editValue,
+        reason: editReason.trim(),
+      });
+      setEditing(null);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("common.error"));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function explain(violationId: string) {
     if (!scanId) return;
@@ -172,6 +210,9 @@ export default function ScanDetail() {
           <div className="card">
             <div className="card-head">
               <h2>{t("scan.declarations")}</h2>
+              <span className="muted" style={{ fontSize: 12 }}>
+                Correct a misread value — the change is logged and re-committed to the ledger
+              </span>
             </div>
             <div className="table-scroll">
               <table>
@@ -180,6 +221,7 @@ export default function ScanDetail() {
                     <th>{t("scan.field")}</th>
                     <th>{t("scan.value")}</th>
                     <th>{t("scan.status")}</th>
+                    <th />
                   </tr>
                 </thead>
                 <tbody>
@@ -192,13 +234,58 @@ export default function ScanDetail() {
                         onMouseLeave={() => setHighlight(null)}
                       >
                         <td>{fieldLabel(declaration.field, lang)}</td>
-                        <td>{declaration.value ?? <span className="muted">—</span>}</td>
+                        <td>
+                          {editing?.id === declaration.id ? (
+                            <div className="stack" style={{ gap: 7 }}>
+                              <input
+                                type="text"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                placeholder="Value as printed on the pack"
+                                autoFocus
+                              />
+                              <input
+                                type="text"
+                                value={editReason}
+                                onChange={(e) => setEditReason(e.target.value)}
+                                placeholder="Reason for the correction (required)"
+                              />
+                              <div className="row">
+                                <button
+                                  className="btn btn-sm btn-primary"
+                                  onClick={saveOverride}
+                                  disabled={saving || !editReason.trim()}
+                                >
+                                  {saving ? "Saving…" : "Save correction"}
+                                </button>
+                                <button className="btn btn-sm" onClick={() => setEditing(null)}>
+                                  {t("common.close")}
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            (declaration.value ?? <span className="muted">—</span>)
+                          )}
+                        </td>
                         <td>
                           <span
-                            className={`tag${declaration.status === "missing" ? " tag-high" : ""}`}
+                            className={`tag${
+                              declaration.status === "missing"
+                                ? " tag-high"
+                                : declaration.status === "officer_verified"
+                                  ? " tag-medium"
+                                  : ""
+                            }`}
                           >
-                            {declaration.status}
+                            {declaration.status.replace(/_/g, " ")}
                           </span>
+                        </td>
+                        <td>
+                          {editing?.id !== declaration.id && (
+                            <button className="btn btn-sm" onClick={() => startEdit(declaration)}>
+                              Correct
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -206,6 +293,40 @@ export default function ScanDetail() {
               </table>
             </div>
           </div>
+
+          {overrides.length > 0 && (
+            <div className="card">
+              <div className="card-head">
+                <h2>Officer corrections</h2>
+                <span className="muted">{overrides.length}</span>
+              </div>
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Officer</th>
+                      <th>Change</th>
+                      <th>Reason</th>
+                      <th>Recorded</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {overrides.map((override) => (
+                      <tr key={override.id}>
+                        <td>{override.officer_name}</td>
+                        <td>
+                          <span className="muted">{override.old_value ?? "—"}</span> →{" "}
+                          <strong>{override.new_value}</strong>
+                        </td>
+                        <td>{override.reason}</td>
+                        <td className="muted">{formatDateTime(override.created_at, lang)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="stack">
