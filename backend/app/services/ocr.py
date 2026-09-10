@@ -57,27 +57,37 @@ class NebiusVisionProvider(OCRProvider):
             text = (line.get("text") or "").strip()
             if not text:
                 continue
-            bbox = line.get("bbox") or {}
-            normalised = {
-                "x": float(bbox.get("x", 0.0)),
-                "y": float(bbox.get("y", 0.0)),
-                "w": float(bbox.get("w", 0.0)),
-                "h": float(bbox.get("h", 0.0)),
-            }
+            bbox = self._valid_bbox(line.get("bbox"))
             boxes.append(
                 TextBox(
                     text=text,
-                    bbox=normalised,
-                    confidence=float(line.get("confidence", 0.0)),
-                    height_px=self._height_px(image_path, normalised["h"]),
+                    bbox=bbox,
+                    confidence=float(line.get("confidence") or 0.0),
+                    height_px=self._height_px(image_path, bbox["h"]) if bbox else None,
                 )
             )
         return boxes
 
     @staticmethod
-    def _height_px(image_path: str, relative_height: float) -> float | None:
-        if relative_height <= 0:
+    def _valid_bbox(raw: object) -> dict | None:
+        """Vision models do not always ground their output. A missing or degenerate box
+        is returned as None rather than a zero-sized rectangle: an evidence docket must
+        say "not located on label" instead of pointing at the wrong place.
+        """
+        if not isinstance(raw, dict):
             return None
+        try:
+            box = {key: float(raw.get(key, 0.0)) for key in ("x", "y", "w", "h")}
+        except (TypeError, ValueError):
+            return None
+        if box["w"] <= 0.001 or box["h"] <= 0.001:
+            return None
+        if not all(0.0 <= box[key] <= 1.0 for key in ("x", "y", "w", "h")):
+            return None
+        return box
+
+    @staticmethod
+    def _height_px(image_path: str, relative_height: float) -> float | None:
         try:
             from PIL import Image
 

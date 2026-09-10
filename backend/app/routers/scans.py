@@ -179,6 +179,7 @@ def _reevaluate(db: Session, scan: Scan) -> None:
     for viol in verdict.violations:
         db.add(Violation(scan_id=scan.id, **viol))
     scan.verdict = verdict.result
+    scan.not_assessed = verdict.not_assessed
     db.flush()
     db.refresh(scan)
     evidence_chain.append_scan(db, scan)

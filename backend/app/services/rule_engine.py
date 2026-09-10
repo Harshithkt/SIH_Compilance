@@ -31,6 +31,9 @@ class Declaration:
 class Verdict:
     result: str  # GO | FIX | REVIEW
     violations: list[dict] = field(default_factory=list)
+    # Checks that could not be performed on this capture (e.g. numeral height when the
+    # text was recognised without coordinates). Reported, never counted as a breach.
+    not_assessed: list[dict] = field(default_factory=list)
 
 
 class RulePack:
@@ -89,9 +92,16 @@ def _check_regex(decl: Declaration | None, params: dict) -> bool:
     return re.match(params["pattern"], decl.value.strip(), flags) is not None
 
 
-def _check_min_height(decl: Declaration | None, params: dict) -> bool:
-    if not decl or decl.height_px is None:
+def _check_min_height(decl: Declaration | None, params: dict) -> bool | None:
+    """None means 'could not be measured' — distinct from 'too small'.
+
+    A declaration that was read without coordinates cannot be measured, and an
+    unmeasurable check must never be reported as a contravention.
+    """
+    if not decl or not decl.present:
         return False
+    if decl.height_px is None:
+        return None
     return decl.height_px >= params["min_height_px"]
 
 
@@ -104,6 +114,7 @@ def evaluate(
     clause citations and evidence bounding boxes, plus an explainable overall verdict.
     """
     violations: list[dict] = []
+    not_assessed: list[dict] = []
 
     for rule in rule_pack.rules:
         if not _applies(rule, context):
@@ -111,7 +122,7 @@ def evaluate(
 
         decl = declarations.get(rule["field"])
         check_type = rule["check_type"]
-        passed: bool
+        passed: bool | None
 
         if check_type == "presence":
             passed = _check_presence(decl)
@@ -124,6 +135,17 @@ def evaluate(
             passed = True
         else:
             passed = True
+
+        if passed is None:
+            not_assessed.append(
+                {
+                    "rule_id": rule["id"],
+                    "clause": rule["clause"],
+                    "title": rule["title"],
+                    "reason": "Could not be measured from this capture — no coordinates were recorded for the declaration.",
+                }
+            )
+            continue
 
         if not passed:
             violations.append(
@@ -145,7 +167,7 @@ def evaluate(
     else:
         result = "FIX"
 
-    return Verdict(result=result, violations=violations)
+    return Verdict(result=result, violations=violations, not_assessed=not_assessed)
 
 
 def diff_rule_versions(old_version: str, new_version: str) -> list[dict]:

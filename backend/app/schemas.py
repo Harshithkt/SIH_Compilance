@@ -53,6 +53,7 @@ class ScanOut(BaseModel):
     ocr_lang: str
     ocr_provider: str
     verdict: str
+    not_assessed: list[dict] = []
     product_name: str | None
     is_food_item: bool
     is_imported: bool

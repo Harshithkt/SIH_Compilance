@@ -99,6 +99,7 @@ DEMO_LABELS = [
             "Net Quantity: 300 g",
             "MRP: Rs. 410.00",
             "Mfg Date: 01/2026",
+            "Best Before: 01/2028",
             "Consumer Care: hello@globaltrade.example",
         ],
         True,
@@ -142,6 +143,7 @@ DEMO_LABELS = [
             "अधिकतम खुदरा मूल्य: Rs. 620.00",
             "निर्माण तिथि: 07/2026",
             "उपभोक्ता सेवा: 1800-180-4040",
+            "Best Before: 07/2027",
             "FSSAI Lic No: 12218044000456",
         ],
         True,
@@ -227,11 +229,19 @@ def seed() -> None:
             image_hash = evidence_chain.sha256_file(image_path)
             lat, lon = MARKET_LOCATIONS[index % len(MARKET_LOCATIONS)]
 
-            # Spread captures over the last 45 days so recency weighting is exercised.
+            # The first two inspections predate the 2022 amendment, so they stay pinned
+            # to the rule pack in force on their inspection date — this is what the
+            # rule-version comparison on a scan demonstrates.
+            pre_amendment = index < 2
+            rule_version = "2011-v1" if pre_amendment else None
+
             # Set before the ledger commit: the capture time is part of the hashed
             # payload, so back-dating it afterwards would (correctly) break the chain.
-            captured_at = now - timedelta(
-                days=random.randint(0, 45), hours=random.randint(0, 23)
+            captured_at = (
+                datetime(2021, 9 - index, 14, 10, 30, tzinfo=timezone.utc)
+                if pre_amendment
+                # Spread the rest over the last 45 days so recency weighting is exercised.
+                else now - timedelta(days=random.randint(0, 45), hours=random.randint(0, 23))
             )
 
             pipeline.run_scan(
@@ -247,6 +257,7 @@ def seed() -> None:
                 is_food_item=is_food,
                 is_imported=is_imported,
                 captured_at=captured_at,
+                rule_version=rule_version,
             )
 
         counts = {

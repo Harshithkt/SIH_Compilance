@@ -53,6 +53,8 @@ class Scan(Base):
     ocr_lang: Mapped[str] = mapped_column(String, default="en")
     ocr_provider: Mapped[str] = mapped_column(String, default="mock")
     verdict: Mapped[str] = mapped_column(String, default="PENDING")
+    # Checks the capture could not support (e.g. numeral height without coordinates).
+    not_assessed: Mapped[list | None] = mapped_column(JSON, nullable=True, default=list)
     product_name: Mapped[str | None] = mapped_column(String, nullable=True)
     is_food_item: Mapped[bool] = mapped_column(Boolean, default=False)
     is_imported: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -105,6 +105,7 @@ def run_scan(
         ocr_lang=lang,
         ocr_provider=provider.name,
         verdict=verdict.result,
+        not_assessed=verdict.not_assessed,
         product_name=product_name,
         is_food_item=is_food_item,
         is_imported=is_imported,

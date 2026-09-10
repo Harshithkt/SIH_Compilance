@@ -1,7 +1,7 @@
 version: "2011-v1"
 title: "Legal Metrology (Packaged Commodities) Rules, 2011 — Rule 6/7/8/18 subset"
 effective_date: "2011-11-14"
-superseded_by: null
+superseded_by: "2022-v2"
 rules:
   - id: R6-a-mfg-importer-packer
     clause: "Rule 6(1)(a)"

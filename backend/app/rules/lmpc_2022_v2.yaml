@@ -1,0 +1,122 @@
+version: "2022-v2"
+title: "Legal Metrology (Packaged Commodities) Rules, 2011 — as amended w.e.f. 01-04-2022"
+effective_date: "2022-04-01"
+superseded_by: null
+rules:
+  - id: R6-a-mfg-importer-packer
+    clause: "Rule 6(1)(a)"
+    title: "Name and address of manufacturer/packer/importer"
+    field: manufacturer_details
+    check_type: presence
+    severity: high
+    message: "Name and complete address of the manufacturer, packer, or importer must be declared."
+
+  - id: R6-b-common-name
+    clause: "Rule 6(1)(b)"
+    title: "Common or generic name of commodity"
+    field: common_name
+    check_type: presence
+    severity: medium
+    message: "The common or generic name of the commodity must be declared."
+
+  - id: R6-b-net-quantity
+    clause: "Rule 6(1)(b)"
+    title: "Net quantity in standard units"
+    field: net_quantity
+    check_type: regex
+    params:
+      pattern: '^\s*\d+(\.\d+)?\s?(g|gm|gram|grams|kg|ml|l|litre|litres)\s*$'
+      flags: "i"
+    severity: high
+    message: "Net quantity must be declared in standard metric units (g/kg/ml/l)."
+
+  - id: R6-c-mrp
+    clause: "Rule 6(1)(c)"
+    title: "Retail sale price (MRP)"
+    field: mrp
+    check_type: regex
+    params:
+      pattern: '^\s*(rs\.?|inr|₹)?\s*[\d,]+(\.\d{1,2})?\s*$'
+      flags: "i"
+    severity: high
+    message: "Maximum Retail Price, inclusive of all taxes, must be declared."
+
+  - id: R6-d-mfg-date
+    clause: "Rule 6(1)(d)"
+    title: "Month and year of manufacture/packing/import"
+    field: mfg_date
+    check_type: regex
+    params:
+      pattern: '^\s*(0[1-9]|1[0-2])[\/\-\s](\d{4}|\d{2})\s*$'
+      flags: "i"
+    severity: high
+    message: "Month and year of manufacture, packing, or import must be declared."
+
+  - id: R6-e-consumer-care
+    clause: "Rule 6(1)(e)"
+    title: "Consumer care / complaint contact"
+    field: consumer_care
+    check_type: presence
+    severity: medium
+    message: "Consumer care details (address/phone/email) for complaints must be declared."
+
+  - id: R6-country-of-origin
+    clause: "Rule 6(1)(f)"
+    title: "Country of origin (imported goods)"
+    field: country_of_origin
+    check_type: presence
+    severity: low
+    message: "Country of origin must be declared for imported packages."
+    applies_if:
+      field: is_imported
+      equals: true
+
+  # Amended: the revised Second Schedule raises the minimum type size, and an
+  # undersized MRP declaration is now treated as a high-severity contravention.
+  - id: R7-numeral-height-mrp
+    clause: "Rule 7 / Second Schedule (as amended 2022)"
+    title: "Minimum numeral height for MRP declaration"
+    field: mrp
+    check_type: min_height_px
+    params:
+      min_height_px: 26
+      reference: "Approximates the revised Second Schedule minimum type-size mandate; measured in relative pixels against the detected label height, not absolute mm."
+    severity: high
+    message: "MRP numerals do not meet the minimum height mandated for this pack size."
+
+  - id: R8-fssai-license
+    clause: "FSS Act 2006, Sec 26 read with LMPC Rule 6(1)(a)"
+    title: "FSSAI license number (for food items)"
+    field: fssai_license_no
+    check_type: regex
+    params:
+      pattern: '^\d{14}$'
+      flags: ""
+    severity: high
+    message: "FSSAI license number must be a valid 14-digit number, displayed on the package."
+    applies_if:
+      field: is_food_item
+      equals: true
+
+  # New in this version: date of expiry / best before for pre-packaged food.
+  - id: R6-best-before
+    clause: "Rule 6(1)(d) proviso"
+    title: "Best before / use by date"
+    field: best_before
+    check_type: presence
+    severity: medium
+    message: "Best before or use-by date must be declared on pre-packaged food."
+    applies_if:
+      field: is_food_item
+      equals: true
+
+  # Amended: unit sale price is a declaration requirement, not an advisory check.
+  - id: R18-unit-sale-price-sanity
+    clause: "Rule 18 (as amended 2022)"
+    title: "MRP-to-net-quantity sanity check"
+    field: unit_price_sanity
+    check_type: numeric_ratio
+    params:
+      description: "Flags implausible MRP/quantity ratios for manual review."
+    severity: medium
+    message: "MRP relative to declared net quantity looks unusual — recommend manual review."

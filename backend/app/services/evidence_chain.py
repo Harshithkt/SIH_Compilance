@@ -58,6 +58,9 @@ def canonical_payload(scan: Scan) -> dict:
             ],
             key=lambda d: d["field"],
         ),
+        "not_assessed": sorted(
+            [entry["rule_id"] for entry in (scan.not_assessed or [])]
+        ),
         "violations": sorted(
             [
                 {"rule_id": v.rule_id, "clause": v.clause, "severity": v.severity}

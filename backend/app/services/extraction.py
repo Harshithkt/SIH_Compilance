@@ -80,6 +80,17 @@ FIELD_PATTERNS: dict[str, tuple[list[str], str | None]] = {
         [r"\bcommon name\b", r"\bgeneric name\b", r"\bproduct\s*name\b", r"सामान्य\s*नाम"],
         None,
     ),
+    "best_before": (
+        [
+            r"\bbest before\b",
+            r"\buse by\b",
+            r"\bexpiry\s*(?:date)?\b",
+            r"\bexp\.?\s*(?:date|dt)\b",
+            r"सर्वोत्तम\s*उपयोग",
+            r"समाप्ति\s*(?:तिथि|दिनांक)?",
+        ],
+        None,
+    ),
 }
 
 ALL_FIELDS = list(FIELD_PATTERNS)

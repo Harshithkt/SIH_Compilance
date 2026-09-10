@@ -77,6 +77,33 @@ def test_numerals_below_minimum_height_are_flagged():
     assert any(v["rule_id"] == "R7-numeral-height-mrp" for v in verdict.violations)
 
 
+def test_unmeasurable_height_is_reported_not_charged_as_a_breach():
+    """A declaration read without coordinates cannot be measured. Reporting that as a
+    contravention would put a false accusation into an evidence docket."""
+    declarations = {
+        field: Declaration(field=field, value=value, present=True, height_px=None)
+        for field, value in COMPLIANT.items()
+    }
+    verdict = evaluate(PACK, declarations, {"is_food_item": True, "is_imported": False})
+
+    assert not any(v["rule_id"] == "R7-numeral-height-mrp" for v in verdict.violations)
+    assert any(n["rule_id"] == "R7-numeral-height-mrp" for n in verdict.not_assessed)
+    assert verdict.result == "GO"
+
+
+def test_missing_declaration_still_fails_the_height_check():
+    """Absent is not the same as unmeasurable — a missing MRP must not be excused."""
+    declarations = {
+        field: Declaration(field=field, value=value, present=True, height_px=None)
+        for field, value in COMPLIANT.items()
+        if field != "mrp"
+    }
+    verdict = evaluate(PACK, declarations, {"is_food_item": True, "is_imported": False})
+
+    assert any(v["rule_id"] == "R7-numeral-height-mrp" for v in verdict.violations)
+    assert any(v["rule_id"] == "R6-c-mrp" for v in verdict.violations)
+
+
 def test_four_digit_year_is_accepted():
     for date in ("07/2026", "07/26", "12-2026"):
         verdict = evaluate(

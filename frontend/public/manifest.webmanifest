@@ -1,0 +1,18 @@
+{
+  "name": "LabelLens — Legal Metrology enforcement",
+  "short_name": "LabelLens",
+  "description": "Evidence-grade field inspection and enforcement case-file system for Legal Metrology officials.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f6f9",
+  "theme_color": "#12406b",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

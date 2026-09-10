@@ -12,12 +12,15 @@ DOCKETS_DIR = STORAGE_DIR / "dockets"
 class Settings(BaseSettings):
     app_name: str = "LabelLens"
     database_url: str = f"sqlite:///{BASE_DIR / 'labellens.db'}"
-    active_rule_version: str = "2011-v1"
+    active_rule_version: str = "2022-v2"
 
     # Nebius Token Factory (OpenAI-compatible). Key is read from NEBIUS_API_KEY;
     # everything else is overridable with the LABELLENS_ prefix.
     nebius_base_url: str = "https://api.tokenfactory.nebius.com/v1"
-    nebius_vision_model: str = "Qwen/Qwen2.5-VL-72B-Instruct"
+    # Confirmed against this account's live catalogue (GET /api/v1/system/models).
+    # MiniCPM-V is the only purpose-built vision model available on it; Gemma 3 also
+    # accepts images if a fallback is needed.
+    nebius_vision_model: str = "openbmb/MiniCPM-V-4_5"
     nebius_text_model: str = "meta-llama/Llama-3.3-70B-Instruct"
     nebius_timeout_seconds: float = 90.0
     ocr_provider: str = "auto"  # auto | nebius | tesseract | manual

@@ -353,6 +353,23 @@ def build_docket(scan: Scan) -> Path:
             Paragraph("No contravention of the checked provisions was detected.", styles["body"])
         )
 
+    if scan.not_assessed:
+        story.append(Spacer(1, 3 * mm))
+        story.append(
+            Paragraph(
+                "<b>Checks not assessable from this capture.</b> The following provisions could "
+                "not be evaluated and are therefore neither alleged nor cleared:",
+                styles["small"],
+            )
+        )
+        for item in scan.not_assessed:
+            story.append(
+                Paragraph(
+                    f"• {escape(item['clause'])} — {escape(item['title'])}: {escape(item['reason'])}",
+                    styles["small"],
+                )
+            )
+
     crops = _crop_evidence(scan)
     if crops:
         story.append(Paragraph("F. Evidence crops from the original photograph", styles["h2"]))
