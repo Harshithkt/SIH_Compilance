@@ -171,8 +171,10 @@ MARKET_LOCATIONS = [
 
 
 FONT_CANDIDATES = [
-    "/System/Library/Fonts/Supplemental/Devanagari Sangam MN.ttc",  # covers Latin + Devanagari
-    "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf",
+    "C:/Windows/Fonts/Nirmala.ttc",  # Windows: covers Latin + Devanagari
+    "C:/Windows/Fonts/arial.ttf",    # Windows: Latin
+    "/System/Library/Fonts/Supplemental/Devanagari Sangam MN.ttc",  # macOS: covers Latin + Devanagari
+    "/usr/share/fonts/truetype/noto/NotoSansDevanagari-Regular.ttf", # Linux: Devanagari
     "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 ]

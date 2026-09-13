@@ -53,6 +53,10 @@ class Scan(Base):
     rule_version: Mapped[str] = mapped_column(String)
     ocr_lang: Mapped[str] = mapped_column(String, default="en")
     ocr_provider: Mapped[str] = mapped_column(String, default="mock")
+    # Persisted OCR provenance — see app.services.ocr.OCRResult for field semantics.
+    ocr_mode: Mapped[str] = mapped_column(String, default="online", nullable=True)
+    ocr_fallback_from: Mapped[str | None] = mapped_column(String, nullable=True)
+    ocr_fallback_reason: Mapped[str | None] = mapped_column(String, nullable=True)
     verdict: Mapped[str] = mapped_column(String, default="PENDING")
     # Checks the capture could not support (e.g. numeral height without coordinates).
     not_assessed: Mapped[list | None] = mapped_column(JSON, nullable=True, default=list)
@@ -111,8 +115,12 @@ class Declaration(Base):
     field: Mapped[str] = mapped_column(String)
     value: Mapped[str | None] = mapped_column(String, nullable=True)
     present: Mapped[bool] = mapped_column(Boolean, default=False)
-    status: Mapped[str] = mapped_column(String, default="illegible")  # verified | illegible | missing
-    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    status: Mapped[str] = mapped_column(String, default="illegible")  # verified | illegible | missing | officer_verified
+    # Separate confidence tracks — see rule_engine.Declaration for semantics.
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)  # legacy / overall
+    ocr_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)  # OCR-engine confidence
+    extraction_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)  # value-pattern match quality
+    original_ocr_text: Mapped[str | None] = mapped_column(String, nullable=True)  # text before normalisation
     bbox: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # {x,y,w,h} relative 0-1
     height_px: Mapped[float | None] = mapped_column(Float, nullable=True)
 

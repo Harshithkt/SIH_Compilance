@@ -17,7 +17,10 @@ export interface Declaration {
   value: string | null;
   present: boolean;
   status: string;
-  confidence: number;
+  confidence: number | null;
+  ocr_confidence?: number | null;
+  extraction_confidence?: number | null;
+  original_ocr_text?: string | null;
   bbox: BBox | null;
   height_px: number | null;
 }
@@ -85,6 +88,9 @@ export interface Scan {
   rule_version: string;
   ocr_lang: string;
   ocr_provider: string;
+  ocr_mode?: "online" | "offline" | string;
+  ocr_fallback_from?: string | null;
+  ocr_fallback_reason?: string | null;
   verdict: Verdict;
   not_assessed: { rule_id: string; clause: string; title: string; reason: string }[];
   product_name: string | null;

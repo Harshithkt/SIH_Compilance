@@ -260,6 +260,16 @@ export default function ScanDetail({ officerName }: ScanDetailProps) {
           <p>
             {formatDateTime(scan.captured_at, lang)} · {scan.officer_name}
           </p>
+          <div className="row" style={{ gap: 6, marginTop: 4, alignItems: "center" }}>
+            <span className="tag" style={{ fontSize: 11, textTransform: "uppercase" }}>
+              {scan.ocr_provider} · {scan.ocr_mode ?? "online"}
+            </span>
+            {scan.ocr_fallback_from && (
+              <span className="tag" style={{ fontSize: 11, background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" }}>
+                Fell back from {scan.ocr_fallback_from} ({scan.ocr_fallback_reason ?? "fallback"})
+              </span>
+            )}
+          </div>
         </div>
         <div className="page-head-actions">
           <VerdictBadge verdict={scan.verdict} />
@@ -348,6 +358,15 @@ export default function ScanDetail({ officerName }: ScanDetailProps) {
                   </>
                 ) : (
                   <span className="muted">not committed</span>
+                )}
+              </dd>
+              <dt>OCR Engine</dt>
+              <dd>
+                <span className="mono">{scan.ocr_provider}</span> · {scan.ocr_mode ? scan.ocr_mode.toUpperCase() : "ONLINE"} ({scan.ocr_lang})
+                {scan.ocr_fallback_from && (
+                  <div className="muted" style={{ fontSize: 11, marginTop: 2, color: "var(--color-warn, #d97706)" }}>
+                    Fell back from {scan.ocr_fallback_from} ({scan.ocr_fallback_reason ?? "fallback"})
+                  </div>
                 )}
               </dd>
             </dl>
@@ -462,6 +481,7 @@ export default function ScanDetail({ officerName }: ScanDetailProps) {
                   <tr>
                     <th>{t("scan.field")}</th>
                     <th>{t("scan.value")}</th>
+                    <th>OCR Conf.</th>
                     <th>{t("scan.status")}</th>
                     <th />
                   </tr>
@@ -510,19 +530,36 @@ export default function ScanDetail({ officerName }: ScanDetailProps) {
                           )}
                         </td>
                         <td>
+                          {declaration.ocr_confidence != null ? (
+                            <span className="mono" title={`OCR confidence: ${(declaration.ocr_confidence * 100).toFixed(1)}%`}>
+                              {(declaration.ocr_confidence * 100).toFixed(0)}%
+                            </span>
+                          ) : declaration.confidence != null ? (
+                            <span className="mono" title={`Confidence: ${(declaration.confidence * 100).toFixed(1)}%`}>
+                              {(declaration.confidence * 100).toFixed(0)}%
+                            </span>
+                          ) : (
+                            <span className="muted">—</span>
+                          )}
+                        </td>
+                        <td>
                           <DeclarationStatus declaration={declaration} />
                         </td>
                         <td>
                           {editing?.id !== declaration.id && (
                             <div className="stack" style={{ gap: 5 }}>
-                              {declaration.bbox && (
+                              {declaration.bbox ? (
                                 <button
                                   className="locate-btn"
                                   onClick={() => setHighlight(declaration.field)}
                                 >
                                   {t("scan.locate")} <IconArrowRight size={11} />
                                 </button>
-                              )}
+                              ) : declaration.present ? (
+                                <span className="muted" style={{ fontSize: 11 }}>
+                                  Text detected — location evidence unavailable
+                                </span>
+                              ) : null}
                               <button className="btn btn-sm" onClick={() => startEdit(declaration)}>
                                 {t("scan.correct")}
                               </button>
@@ -740,8 +777,9 @@ function DeclarationStatus({ declaration }: { declaration: Declaration }) {
   };
   const entry = map[status] ?? map.verified;
   const Icon = entry.icon;
+  const rawConf = declaration.ocr_confidence ?? declaration.confidence;
   const confidencePct =
-    declaration.present && declaration.confidence > 0 ? Math.round(declaration.confidence * 100) : null;
+    declaration.present && rawConf != null && rawConf > 0 ? Math.round(rawConf * 100) : null;
 
   return (
     <span className="row" style={{ gap: 6, flexWrap: "nowrap" }}>

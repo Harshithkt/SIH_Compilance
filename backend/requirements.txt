@@ -9,3 +9,7 @@ pillow==12.3.0
 pyyaml==6.0.3
 pytest==9.1.1
 httpx==0.28.1
+pytesseract>=0.3.10
+# Optional offline OCR engine (CPU):
+# paddlepaddle>=2.5.0
+# paddleocr>=2.7.0

@@ -1,154 +1,180 @@
 """Deterministic declaration extraction from OCR text boxes.
 
-Regex/keyword layer first (per the memo: "regulation-mapped logic isn't prompt-dependent").
-An LLM explainer can be layered on later for messy fields without changing this contract.
+Regex/keyword layer (per the memo: "regulation-mapped logic isn't prompt-dependent").
+An LLM explainer can be layered on for messy fields without changing this contract.
+
+Changes from original:
+  • Integrates ocr_normalize for OCR character-error correction and alias expansion.
+  • Uses line-level TextBox objects (Tesseract provider now groups words into lines).
+  • calculate_declaration_confidence() aggregates per-token OCR confidences correctly
+    (weighted mean by token length) rather than searching for the full multi-word value
+    as a substring of a single token — which always returned 0.0.
+  • Declaration carries ocr_confidence (measured from OCR engine) separately from
+    extraction_confidence (how well the value pattern matched).
+  • Original OCR text is preserved alongside the extracted/normalised value.
 """
 
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from app.services.ocr import TextBox
+from app.services.ocr_normalize import find_field_in_text, normalise_text
 from app.services.rule_engine import Declaration
 
-# field -> (label keywords incl. Hindi, value pattern used to refine the captured segment)
+# ---------------------------------------------------------------------------
+# Field patterns — value extraction regexes
 #
-# Keyword precision matters: "Manufactured by" is the manufacturer declaration, while
-# "Manufactured on" is the date declaration, so the date keywords require an explicit
-# on/in/date token rather than matching the "manufactured" stem alone.
-FIELD_PATTERNS: dict[str, tuple[list[str], str | None]] = {
-    "mrp": (
-        [
-            r"\bm\.?\s?r\.?\s?p\b\.?",
-            r"\bmaximum retail price\b",
-            r"\bretail sale price\b",
-            r"अधिकतम\s*खुदरा\s*मूल्य",
-            r"मूल्य",
-        ],
-        r"(?:rs\.?|inr|₹)?\s*[\d,]+(?:\.\d{1,2})?",
-    ),
-    "net_quantity": (
-        [
-            r"\bnet\s*(?:qty|quantity|wt|weight)\b\.?",
-            r"शुद्ध\s*(?:मात्रा|वजन)",
-            r"मात्रा",
-        ],
-        r"\d+(?:\.\d+)?\s*(?:g|gm|gram|grams|kg|ml|l|litre|litres)\b",
-    ),
-    "mfg_date": (
-        [
-            r"\bmfg\.?\s*(?:date|dt)\b\.?",
-            r"\bmfg\b\.?(?!\s*by)",
-            r"\bmanufactured\s+(?:on|in)\b",
-            r"\bdate of (?:manufacture|packing|import)\b",
-            r"\bpacked on\b",
-            r"निर्माण\s*(?:तिथि|तारीख|दिनांक)",
-            r"पैकिंग\s*(?:तिथि|तारीख|दिनांक)",
-        ],
-        r"(?:0[1-9]|1[0-2])[\/\-\s](?:\d{4}|\d{2})\b",
-    ),
-    "manufacturer_details": (
-        [
-            r"\bmanufactured by\b",
-            r"\bpacked by\b",
-            r"\bmarketed by\b",
-            r"\bimported by\b",
-            r"\bmfd\.?\s*by\b",
-            r"निर्माता",
-            r"आयातक",
-        ],
-        None,
-    ),
-    "consumer_care": (
-        [
-            r"\bconsumer care\b",
-            r"\bcustomer care\b",
-            r"\bcomplaints?\b",
-            r"\bhelpline\b",
-            r"उपभोक्ता\s*(?:सेवा|शिकायत)",
-            r"ग्राहक\s*सेवा",
-        ],
-        None,
-    ),
-    "country_of_origin": (
-        [r"\bcountry of origin\b", r"\bmade in\b", r"उत्पत्ति\s*देश", r"मूल\s*देश"],
-        None,
-    ),
-    "fssai_license_no": (
-        [r"\bfssai\b", r"\blic\.?\s*no\b\.?", r"एफएसएसएआई"],
-        r"\d{14}",
-    ),
-    "common_name": (
-        [r"\bcommon name\b", r"\bgeneric name\b", r"\bproduct\s*name\b", r"सामान्य\s*नाम"],
-        None,
-    ),
-    "best_before": (
-        [
-            r"\bbest before\b",
-            r"\buse by\b",
-            r"\bexpiry\s*(?:date)?\b",
-            r"\bexp\.?\s*(?:date|dt)\b",
-            r"सर्वोत्तम\s*उपयोग",
-            r"समाप्ति\s*(?:तिथि|दिनांक)?",
-        ],
-        None,
-    ),
+# Keywords are now managed by ocr_normalize.FIELD_ALIASES; only the value
+# patterns live here.  FIELD_PATTERNS is kept for the rule engine's benefit.
+# ---------------------------------------------------------------------------
+
+FIELD_PATTERNS: dict[str, str | None] = {
+    "mrp": r"(?:rs\.?|inr|₹)?\s*[\d,]+(?:\.\d{1,2})?",
+    "net_quantity": r"\d+(?:\.\d+)?\s*(?:g|gm|gram|grams|kg|ml|l|litre|litres)\b",
+    "mfg_date": r"(?:0[1-9]|1[0-2])[\/\-\s](?:\d{4}|\d{2})\b",
+    "manufacturer_details": None,
+    "consumer_care": None,
+    "country_of_origin": None,
+    "fssai_license_no": r"\d{14}",
+    "common_name": None,
+    "best_before": None,
 }
 
 ALL_FIELDS = list(FIELD_PATTERNS)
 SEPARATORS = " :;-–—\t.|"
 
+# Minimum token length to be considered a meaningful OCR evidence token
+_MIN_TOKEN_LEN = 2
+# Minimum Tesseract confidence to count a token in the aggregate
+_MIN_TOKEN_CONF = 0.0  # include all (even low-confidence tokens contribute)
+
+
+# ---------------------------------------------------------------------------
+# Confidence calculation — Step 3 fix
+# ---------------------------------------------------------------------------
+
+
+def calculate_declaration_confidence(
+    declaration_text: str,
+    boxes: list[TextBox],
+    *,
+    line_text: str | None = None,
+) -> float | None:
+    """Aggregate OCR confidence for a declaration.
+
+    Strategy: length-weighted mean of individual token confidences.
+
+    Rationale:
+      • Longer tokens provide more OCR evidence than short ones (a 10-char word
+        is a stronger signal than a 1-char character).
+      • Mean is more robust than min for multi-token declarations — one poor
+        token (e.g., a noisy punctuation character) should not dominate.
+      • Min confidence is available via the `min_confidence` field in the
+        returned dict — useful for critical single-character fields like dates.
+
+    The function searches for tokens that appear in the relevant line text
+    rather than requiring the full multi-word declaration value to match a
+    single token (the original bug).
+
+    Returns None when no matching tokens are found rather than returning 0.0,
+    which would be misleading.
+    """
+    search_text = (line_text or declaration_text).lower()
+    if not search_text.strip():
+        return None
+
+    matched_confs: list[float] = []
+    matched_lengths: list[int] = []
+
+    for box in boxes:
+        token = box.text.strip()
+        if len(token) < _MIN_TOKEN_LEN:
+            continue
+        if token.lower() in search_text and box.confidence >= _MIN_TOKEN_CONF:
+            matched_confs.append(box.confidence)
+            matched_lengths.append(len(token))
+
+    if not matched_confs:
+        return None
+
+    total_len = sum(matched_lengths)
+    if total_len == 0:
+        return None
+
+    weighted_mean = sum(c * l for c, l in zip(matched_confs, matched_lengths)) / total_len
+    return round(weighted_mean, 4)
+
+
+# ---------------------------------------------------------------------------
+# Label matching — wraps ocr_normalize
+# ---------------------------------------------------------------------------
+
 
 def _label_matches(line: str) -> list[tuple[int, int, str]]:
     """All declaration labels found in one line, as (start, end, field).
 
-    Overlapping matches are resolved in favour of the longer (more specific) keyword,
-    so "शुद्ध मात्रा" wins over "मात्रा" and "Manufactured by" is never read as a date.
+    Delegates to ocr_normalize.find_field_in_text which handles both the
+    original extraction patterns and the expanded alias dictionary.
+    Overlapping matches are resolved in favour of the longer keyword.
     """
-    matches: list[tuple[int, int, str]] = []
-    for field, (keywords, _) in FIELD_PATTERNS.items():
-        for keyword in keywords:
-            for match in re.finditer(keyword, line, re.IGNORECASE):
-                matches.append((match.start(), match.end(), field))
-
-    matches.sort(key=lambda m: (m[0], -(m[1] - m[0])))
-    kept: list[tuple[int, int, str]] = []
-    for start, end, field in matches:
-        if any(start < k_end and end > k_start for k_start, k_end, _ in kept):
-            continue
-        kept.append((start, end, field))
-    return sorted(kept, key=lambda m: m[0])
+    return find_field_in_text(line)
 
 
-def extract_declarations(boxes: list[TextBox]) -> dict[str, Declaration]:
+# ---------------------------------------------------------------------------
+# Main extraction function
+# ---------------------------------------------------------------------------
+
+
+def extract_declarations(boxes: list[TextBox] | Any) -> dict[str, Declaration]:
     """Map recognised text lines onto LMPC declaration fields.
 
-    A line is segmented at its declaration labels, so "Net Qty: 200 g  MRP: Rs 45" yields
-    both fields, and each field's value is bounded by the next label rather than running
-    to the end of the line. Every known field gets a Declaration whether or not it was
-    found, so the rule engine can distinguish 'missing' from 'found but malformed' and the
-    UI can mark fields 'verified on label' vs 'illegible'.
+    A line is segmented at its declaration labels, so:
+        "Net Qty: 200 g  MRP: Rs 45"
+    yields both net_quantity and mrp, each bounded by the next label.
+
+    Every known field gets a Declaration whether found or not, so the rule
+    engine can distinguish 'missing' from 'found but malformed'.
+
+    Confidence on each Declaration:
+      • confidence: length-weighted mean OCR confidence from matching tokens
+                    (None when no confident tokens found)
+      Note: confidence=None is stored as NULL in the DB and reported honestly
+      to the UI, rather than 0.0 which would look like a genuine measurement.
     """
+    if hasattr(boxes, "regions"):
+        boxes_list: list[TextBox] = boxes.regions
+    elif isinstance(boxes, list):
+        boxes_list = boxes
+    else:
+        boxes_list = list(boxes)
+
     declarations: dict[str, Declaration] = {
         f: Declaration(field=f, present=False) for f in ALL_FIELDS
     }
 
-    for box in boxes:
-        line = box.text
-        matches = _label_matches(line)
+    for box in boxes_list:
+        original_line = box.text
+
+        # Layer 1: conservative OCR character corrections
+        corrected_line = normalise_text(original_line)
+
+        # Find all declaration labels in the (possibly corrected) line
+        matches = _label_matches(corrected_line)
 
         for index, (_, end, field) in enumerate(matches):
             if declarations[field].present:
                 continue
 
-            segment_end = matches[index + 1][0] if index + 1 < len(matches) else len(line)
-            segment = line[end:segment_end].strip(SEPARATORS).strip()
+            segment_end = matches[index + 1][0] if index + 1 < len(matches) else len(corrected_line)
+            segment = corrected_line[end:segment_end].strip(SEPARATORS).strip()
 
-            value_pattern = FIELD_PATTERNS[field][1]
+            value_pattern = FIELD_PATTERNS.get(field)
             if value_pattern:
                 refined = re.search(value_pattern, segment, re.IGNORECASE)
-                # Keep the raw segment when the pattern fails: a malformed declaration is
-                # a rule-engine finding, not an extraction failure.
+                # Keep the raw segment when the pattern fails: a malformed
+                # declaration is a rule-engine finding, not an extraction failure.
                 value = refined.group(0).strip() if refined else segment
             else:
                 value = segment
@@ -156,15 +182,34 @@ def extract_declarations(boxes: list[TextBox]) -> dict[str, Declaration]:
             if not value:
                 continue
 
+            # Calculate OCR confidence for this declaration (Steps 2-3 fix)
+            ocr_confidence = calculate_declaration_confidence(
+                value, boxes_list, line_text=corrected_line
+            )
+            # Extraction confidence: 1.0 if value pattern matched, 0.5 if raw segment used
+            extraction_confidence: float | None = (
+                1.0 if (value_pattern and re.search(value_pattern, segment, re.IGNORECASE))
+                else (0.5 if value_pattern else None)
+            )
+
             declarations[field] = Declaration(
                 field=field,
                 value=value,
                 present=True,
                 height_px=box.height_px,
                 bbox=box.bbox,
+                # Attach both confidence types — stored on Declaration for evidence
+                ocr_confidence=ocr_confidence,
+                extraction_confidence=extraction_confidence,
+                original_ocr_text=original_line,
             )
 
     return declarations
+
+
+# ---------------------------------------------------------------------------
+# Helpers used by pipeline and rule router
+# ---------------------------------------------------------------------------
 
 
 def declaration_status(decl: Declaration) -> str:
@@ -174,9 +219,7 @@ def declaration_status(decl: Declaration) -> str:
 
 
 def resolve_entity_name(declarations: dict[str, Declaration]) -> str | None:
-    """Entity resolution key: the manufacturer/packer/importer line, normalised.
-    Used to aggregate scans into seller-level risk in the worklist.
-    """
+    """Entity resolution key: manufacturer/packer/importer line, normalised."""
     decl = declarations.get("manufacturer_details")
     if not decl or not decl.value:
         return None

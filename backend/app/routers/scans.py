@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models import Declaration, ManualOverride, Scan
 from app.schemas import OverrideIn, OverrideOut, ReviewIn, ReviewOut, ScanOut, ScanSummaryOut
 from app.services import case_engine, evidence_chain, extraction, nebius, pipeline, rule_engine
+from app.services.pipeline import InvalidImageError, OCRFailed, QualityGateRejected
 
 router = APIRouter(prefix="/api/v1/scans", tags=["scans"])
 
@@ -66,7 +67,7 @@ async def create_scan(
             rule_version=rule_version,
             skip_quality_gate=skip_quality_gate,
         )
-    except pipeline.QualityGateRejected as exc:
+    except QualityGateRejected as exc:
         image_path.unlink(missing_ok=True)
         raise HTTPException(
             status_code=422,
@@ -76,10 +77,46 @@ async def create_scan(
                 **exc.report.as_dict(),
             },
         ) from exc
+    except InvalidImageError as exc:
+        image_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "invalid_image", "message": exc.message},
+        ) from exc
+    except OCRFailed as exc:
+        image_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "ocr_unavailable",
+                "message": (
+                    "No OCR provider could process this image. "
+                    "Check that Tesseract is installed or NEBIUS_API_KEY is set."
+                ),
+                "detail": exc.message,
+            },
+        ) from exc
     except nebius.NebiusError as exc:
         image_path.unlink(missing_ok=True)
         raise HTTPException(
             status_code=502, detail={"error": "vision_provider_failed", "message": str(exc)}
+        ) from exc
+    except OSError as exc:
+        image_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "image_io_error", "message": f"Cannot read image: {exc}"},
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 — last-resort catch; no tracebacks to client
+        import logging
+        logging.getLogger(__name__).exception("Unexpected error in create_scan")
+        image_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": "An unexpected error occurred processing this image.",
+            },
         ) from exc
 
     return {

@@ -11,7 +11,10 @@ class DeclarationOut(BaseModel):
     value: str | None
     present: bool
     status: str
-    confidence: float
+    confidence: float | None = None  # overall/legacy
+    ocr_confidence: float | None = None
+    extraction_confidence: float | None = None
+    original_ocr_text: str | None = None
     bbox: dict | None
     height_px: float | None
 
@@ -101,6 +104,9 @@ class ScanOut(BaseModel):
     rule_version: str
     ocr_lang: str
     ocr_provider: str
+    ocr_mode: str = "online"
+    ocr_fallback_from: str | None = None
+    ocr_fallback_reason: str | None = None
     verdict: str
     not_assessed: list[dict] = []
     product_name: str | None

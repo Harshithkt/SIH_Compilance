@@ -26,6 +26,15 @@ class Declaration:
     present: bool = False
     height_px: float | None = None
     bbox: dict | None = None
+    # OCR confidence: what the OCR engine measured for the tokens that form this
+    # declaration.  None means it could not be calculated (e.g. manual entry,
+    # or no matching tokens found).  Do not report None as 0.0.
+    ocr_confidence: float | None = None
+    # Extraction confidence: how reliably the value pattern matched (1.0 = pattern
+    # matched, 0.5 = raw segment used, None = free-text field with no pattern).
+    extraction_confidence: float | None = None
+    # Original OCR text before normalisation corrections, for evidence preservation.
+    original_ocr_text: str | None = None
 
 
 @dataclass
@@ -183,12 +192,25 @@ def evaluate(
             passed = True
 
         if passed is None:
+            # Font-size checks produce None when bbox is absent.  The reason
+            # message explicitly states that physical millimetre measurement is
+            # not possible without scale calibration, so this is reported as
+            # NOT_ASSESSABLE rather than as a contravention.
+            is_height_check = check_type in ("min_height_ratio", "numeral_height_table1")
+            reason = (
+                "Physical text height cannot be conclusively established from this "
+                "image without scale calibration. Reported as NOT_ASSESSABLE — "
+                "the declaration's position on the label was not measured."
+                if is_height_check
+                else "Could not be measured from this capture — the declaration's "
+                     "position on the label was not established."
+            )
             not_assessed.append(
                 {
                     "rule_id": rule["id"],
                     "clause": rule["clause"],
                     "title": rule["title"],
-                    "reason": "Could not be measured from this capture — the declaration's position on the label was not established.",
+                    "reason": reason,
                 }
             )
             continue
