@@ -81,6 +81,10 @@ class Scan(Base):
     violations: Mapped[list["Violation"]] = relationship(
         back_populates="scan", cascade="all, delete-orphan"
     )
+    # Structured per-role entity declarations (Phase 2 — manufacturer/packer/importer)
+    entity_roles: Mapped[list["EntityRole"]] = relationship(
+        back_populates="scan", cascade="all, delete-orphan"
+    )
     # A scan can hold several entries: the original commit, plus one per officer
     # correction. Corrections are appended, never written over.
     ledger_entries: Mapped[list["LedgerEntry"]] = relationship(
@@ -125,6 +129,44 @@ class Declaration(Base):
     height_px: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     scan: Mapped["Scan"] = relationship(back_populates="declarations")
+
+
+class EntityRole(Base):
+    """Per-role entity extraction result for one scan (Phase 2).
+
+    Stores the structured extraction output for a single manufacturer, packer,
+    or importer declaration found on the label.  One scan can have multiple
+    EntityRole rows — one per role keyword detected in the OCR output.
+
+    Evidence preservation: every row stores the original OCR evidence that
+    produced it (original_ocr_text, bbox, raw_value, confidence tracks) so the
+    record is self-contained and auditable without re-running OCR.
+
+    extraction_status is an EXTRACTION SIGNAL only:
+      "found"   — name + recognizable address evidence detected
+      "partial" — name detected, no address evidence
+      "empty"   — role keyword matched, no usable content followed
+    It is NOT a compliance verdict.  The rule engine decides compliance.
+    """
+
+    __tablename__ = "entity_roles"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    scan_id: Mapped[str] = mapped_column(ForeignKey("scans.id"), index=True)
+    role: Mapped[str] = mapped_column(String)          # manufacturer | packer | importer
+    entity_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    address_text: Mapped[str | None] = mapped_column(String, nullable=True)
+    raw_value: Mapped[str | None] = mapped_column(String, nullable=True)       # full OCR segment
+    ocr_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    extraction_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    extraction_status: Mapped[str] = mapped_column(String, default="empty")
+    # Original evidence preserved verbatim from OCR output
+    original_ocr_text: Mapped[str | None] = mapped_column(String, nullable=True)
+    bbox: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    height_px: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    scan: Mapped["Scan"] = relationship(back_populates="entity_roles")
 
 
 class Violation(Base):

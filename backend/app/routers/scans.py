@@ -20,6 +20,7 @@ def _load_scan(db: Session, scan_id: str) -> Scan:
         .options(
             selectinload(Scan.declarations),
             selectinload(Scan.violations),
+            selectinload(Scan.entity_roles),
             selectinload(Scan.ledger_entries),
             selectinload(Scan.entity),
             selectinload(Scan.case),

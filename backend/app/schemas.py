@@ -19,6 +19,31 @@ class DeclarationOut(BaseModel):
     height_px: float | None
 
 
+class EntityRoleOut(BaseModel):
+    """Structured per-role entity extraction result for one scan.
+
+    extraction_status is an EXTRACTION SIGNAL, not a compliance verdict:
+      'found'   — name + recognizable address evidence detected by OCR
+      'partial' — name detected, no address evidence
+      'empty'   — role keyword matched but no usable content followed
+    The rule engine (not this record) decides whether the legal requirement
+    is satisfied.
+    """
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    role: str                          # manufacturer | packer | importer
+    entity_name: str | None
+    address_text: str | None
+    raw_value: str | None              # full OCR segment (evidence)
+    ocr_confidence: float | None
+    extraction_confidence: float | None
+    extraction_status: str             # found | partial | empty
+    original_ocr_text: str | None      # un-normalised OCR line (evidence)
+    bbox: dict | None
+    height_px: float | None = None
+
+
 class ViolationOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -118,6 +143,7 @@ class ScanOut(BaseModel):
     officer_decision_notes: str | None
     declarations: list[DeclarationOut] = []
     violations: list[ViolationOut] = []
+    entity_roles: list[EntityRoleOut] = []
     ledger_entry: LedgerEntryOut | None = None
     case: CaseOut | None = None
 

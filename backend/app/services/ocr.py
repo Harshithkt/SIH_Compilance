@@ -44,7 +44,7 @@ class TextBox:
 
     text: str
     bbox: dict | None  # {x, y, w, h} relative 0-1; None when position is unknown
-    confidence: float  # 0–1; use None-like sentinel via OCRResult.confidence if unknown
+    confidence: float | None = None  # 0–1; None when unknown/unmeasured
     height_px: float | None = None
     script: str | None = None  # "latin" | "devanagari" | "mixed" | None
 
@@ -156,7 +156,7 @@ class TesseractOCRProvider(OCRProvider):
 
         full_text = "\n".join(r.text for r in regions)
         overall_conf: float | None = None
-        valid_confs = [r.confidence for r in regions if r.confidence > 0]
+        valid_confs = [r.confidence for r in regions if r.confidence is not None and r.confidence > 0]
         if valid_confs:
             overall_conf = sum(valid_confs) / len(valid_confs)
 
@@ -226,7 +226,7 @@ class TesseractOCRProvider(OCRProvider):
                 TextBox(
                     text=line_text,
                     bbox=bbox,
-                    confidence=line_conf if line_conf is not None else 0.0,
+                    confidence=line_conf,
                     height_px=height_px,
                 )
             )
@@ -346,6 +346,7 @@ class PaddleOCRProvider(OCRProvider):
             from paddleocr import PaddleOCR  # noqa: F401
         except ImportError as exc:
             raise RuntimeError("paddleocr not installed") from exc
+        self._instances: dict[str, Any] = {}
 
     def is_available(self) -> bool:
         try:
@@ -355,14 +356,18 @@ class PaddleOCRProvider(OCRProvider):
         except ImportError:
             return False
 
-    def extract(self, image_path: str, lang: str = "en") -> OCRResult:
-        from paddleocr import PaddleOCR
+    def _get_ocr_engine(self, paddle_lang: str) -> Any:
+        if paddle_lang not in self._instances:
+            from paddleocr import PaddleOCR
+            self._instances[paddle_lang] = PaddleOCR(use_angle_cls=True, lang=paddle_lang, show_log=False)
+        return self._instances[paddle_lang]
 
+    def extract(self, image_path: str, lang: str = "en") -> OCRResult:
         paddle_lang = self._LANG_MAP.get(lang, "en")
         hindi_requested = lang in ("hi", "hi+en", "en+hi")
 
-        ocr = PaddleOCR(use_angle_cls=True, lang=paddle_lang, show_log=False)
-        result = ocr.ocr(image_path, cls=True)
+        ocr_engine = self._get_ocr_engine(paddle_lang)
+        result = ocr_engine.ocr(image_path, cls=True)
 
         regions: list[TextBox] = []
         if result and result[0]:

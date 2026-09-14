@@ -114,7 +114,7 @@ def test_tesseract_skips_whitespace_and_negative_confidence():
 # ===========================================================================
 
 def test_calculate_confidence_multi_token():
-    """Length-weighted average correctly weights longer tokens in multi-word declarations."""
+    """Confidence calculation correctly prioritizes declaration tokens over full line tokens."""
     boxes = [
         TextBox(text="Net", bbox=None, confidence=0.90),
         TextBox(text="Quantity:", bbox=None, confidence=0.80),
@@ -122,10 +122,9 @@ def test_calculate_confidence_multi_token():
     ]
     conf = extraction.calculate_declaration_confidence("200 g", boxes, line_text="Net Quantity: 200 g")
     assert conf is not None
-    # All 3 tokens appear in line_text:
-    # "Net" (len 3, 0.90), "Quantity:" (len 9, 0.80), "200 g" (len 5, 0.96)
-    expected = (3 * 0.90 + 9 * 0.80 + 5 * 0.96) / (3 + 9 + 5)
-    assert pytest.approx(conf, 0.01) == expected
+    # "200 g" token matches declaration "200 g" directly, giving 0.96 without diluting with unrelated line tokens
+    assert pytest.approx(conf, 0.01) == 0.96
+
 
 
 def test_calculate_confidence_missing_tokens_returns_none():
@@ -378,4 +377,86 @@ def test_low_confidence_fallback_retained_when_chain_exhausted():
         assert result.provider_used == "mock_primary"
         assert result.confidence == 0.35
         assert result.text == "Low confidence but real text"
+
+
+# ===========================================================================
+# 9. OCR Union Bounding Box & Manual OCR Protection Tests
+# ===========================================================================
+
+def test_compute_declaration_evidence_union_bbox():
+    """Multi-token declarations produce an enclosing union bbox covering all evidence tokens."""
+    boxes = [
+        TextBox(text="Manufactured", bbox={"x": 0.10, "y": 0.20, "w": 0.20, "h": 0.05}, confidence=0.90),
+        TextBox(text="by", bbox={"x": 0.32, "y": 0.20, "w": 0.05, "h": 0.05}, confidence=0.88),
+        TextBox(text="ABC", bbox={"x": 0.38, "y": 0.20, "w": 0.10, "h": 0.05}, confidence=0.95),
+        TextBox(text="Foods", bbox={"x": 0.49, "y": 0.20, "w": 0.12, "h": 0.05}, confidence=0.92),
+    ]
+    conf, union_bbox, height_px = extraction.compute_declaration_evidence(
+        "Manufactured by ABC Foods", boxes
+    )
+    assert union_bbox is not None
+    # Union bbox: x1=0.10, y1=0.20, x2=0.61 (0.49+0.12), y2=0.25 (0.20+0.05)
+    assert pytest.approx(union_bbox["x"], 0.001) == 0.10
+    assert pytest.approx(union_bbox["y"], 0.001) == 0.20
+    assert pytest.approx(union_bbox["w"], 0.001) == 0.51
+    assert pytest.approx(union_bbox["h"], 0.001) == 0.05
+    assert conf is not None
+    assert 0.85 < conf < 0.95
+
+
+
+def test_text_box_confidence_preserves_none():
+    """Unknown or uncalculated token confidence remains None, NOT 0.0."""
+    box = TextBox(text="Unknown", bbox={"x": 0.1, "y": 0.1, "w": 0.2, "h": 0.1}, confidence=None)
+    assert box.confidence is None
+    assert box.confidence != 0.0
+
+
+def test_manual_text_never_replaces_ocr_silently(tmp_path):
+    """If image OCR fails or produces no text, client-supplied raw_text must NOT silently become image-derived OCR.
+    It must be tagged as MANUAL or fallback OCR provenance recorded.
+    """
+    from app.services import pipeline
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from app.database import Base
+    from app.seed import make_label_image
+
+    db_path = tmp_path / "test_manual_protection.db"
+    engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=engine)
+    session = sessionmaker(bind=engine)()
+
+    img_path = str(tmp_path / "blank_unrelated.jpg")
+    make_label_image(["Unrelated Text Only"], img_path)
+
+    # Simulating a call where image OCR fails or is offline mock returning empty
+    failing_ocr = OCRResult(
+        provider_used="tesseract",
+        mode="offline",
+        language="en",
+        text="",
+        regions=[],
+        confidence=None
+    )
+
+    with patch("app.services.ocr.run_ocr", return_value=failing_ocr):
+        scan, quality_dict = pipeline.run_scan(
+            session,
+            image_path=img_path,
+            image_sha256="fake_sha256",
+            officer_name="Inspector Clouseau",
+            raw_text="Manufactured by Silent Overrider Pvt Ltd",  # Client-supplied manual override text
+            product_name="Protection Pack"
+        )
+        # When raw_text is supplied by the client, the pipeline must mark the scan
+        # with ocr_provider='manual' so it is distinguishable from real image OCR.
+        # It must NEVER silently appear as 'tesseract' or any image-OCR provider.
+        assert scan.ocr_provider == "manual"
+        assert quality_dict is not None  # pipeline completed successfully
+
+
+    session.close()
+
+
 

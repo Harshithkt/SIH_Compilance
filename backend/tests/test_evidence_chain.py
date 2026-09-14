@@ -159,3 +159,20 @@ def test_payload_hash_is_independent_of_row_order(db, label_image):
 
     scan.declarations.reverse()
     assert evidence_chain.payload_hash(evidence_chain.canonical_payload(scan)) == original
+
+
+def test_deleting_the_evidence_image_breaks_the_chain(db, label_image):
+    """Deleting the evidence image file from disk MUST break ledger verification."""
+    import os
+
+    path = label_image()
+    scan = add_scan(db, path)
+    assert evidence_chain.verify_chain(db)["valid"] is True
+
+    os.remove(path)
+
+    result = evidence_chain.verify_chain(db)
+    assert result["valid"] is False
+    assert result["broken_at_sequence"] == scan.ledger_entry.sequence
+    assert "missing" in result["detail"].lower()
+

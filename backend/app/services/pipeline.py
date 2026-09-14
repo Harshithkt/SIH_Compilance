@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session
 
 from app.config import IMAGES_DIR, settings
 from app.models import Declaration as DeclarationRow
-from app.models import Entity, Scan, Violation
+from app.models import Entity, EntityRole, Scan, Violation
 from app.services import (
     evidence_chain,
     extraction,
@@ -231,14 +231,20 @@ def run_scan(
     # ---- 4. Declaration extraction ----
     declarations = extraction.extract_declarations(boxes)
 
+    # ---- 4b. Per-role entity extraction (Phase 2) ----
+    # Runs as a separate pass over the same boxes so the existing
+    # manufacturer_details field is completely undisturbed.
+    entity_decls = extraction.extract_entity_declarations(boxes)
+
     # ---- 5. Rule evaluation ----
     version = rule_version or settings.active_rule_version
     rule_pack = rule_engine.get_rule_pack(version)
     context = {"is_food_item": is_food_item, "is_imported": is_imported}
-    verdict = rule_engine.evaluate(rule_pack, declarations, context)
+    verdict = rule_engine.evaluate(rule_pack, declarations, context, entity_decls)
 
     # ---- 6. Entity resolution ----
-    entity = _resolve_entity(db, declarations, extraction.resolve_entity_name(declarations))
+    # Prefer structured entity_decls (Phase 2); falls back to manufacturer_details.
+    entity = _resolve_entity(db, declarations, extraction.resolve_entity_name(declarations, entity_decls))
 
     # ---- 7. Persist scan ----
     scan = Scan(
@@ -286,6 +292,29 @@ def run_scan(
 
     for viol in verdict.violations:
         db.add(Violation(scan_id=scan.id, **viol))
+
+    db.flush()
+    db.refresh(scan)
+
+    # ---- 8b. Persist per-role entity declarations (Phase 2) ----
+    # Each EntityRole row is self-contained evidence: it carries the original
+    # OCR text, bbox, confidence, and raw segment that produced it.
+    for ed in entity_decls:
+        db.add(
+            EntityRole(
+                scan_id=scan.id,
+                role=ed.role,
+                entity_name=ed.entity_name,
+                address_text=ed.address_text,
+                raw_value=ed.raw_value,
+                ocr_confidence=ed.ocr_confidence,
+                extraction_confidence=ed.extraction_confidence,
+                extraction_status=ed.extraction_status,
+                original_ocr_text=ed.original_ocr_text,
+                bbox=ed.bbox,
+                height_px=ed.height_px,
+            )
+        )
 
     db.flush()
     db.refresh(scan)

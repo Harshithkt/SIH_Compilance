@@ -224,6 +224,126 @@ def find_field_in_text(text: str) -> list[tuple[int, int, str]]:
 
 
 # ---------------------------------------------------------------------------
+# Entity-role alias dictionary (manufacturer / packer / importer)
+# ---------------------------------------------------------------------------
+#
+# Design contract (user adjustment #1):
+#   • Every pattern maps to EXACTLY the role the text explicitly states.
+#   • Combined phrases like "packed and marketed by" map to "packer" only —
+#     marketing is not a regulated LMPC declaration role; inferring it would
+#     create a false legal claim.
+#   • No pattern is shared between roles; overlapping surface forms (e.g.
+#     "manufactured and packed by") are listed explicitly under EACH role they
+#     genuinely cover so there is no ambiguity about what the text asserts.
+#   • Patterns are ordered from most-specific (longest) to least-specific so
+#     the longest-match resolution in find_entity_role_in_text() de-duplicates
+#     correctly.
+#
+# This dict is SEPARATE from FIELD_ALIASES intentionally: entity-role patterns
+# require a different resolution strategy (one text span → one or more roles)
+# compared to field-label patterns (one text span → exactly one field).
+
+ENTITY_ROLE_ALIASES: dict[str, list[str]] = {
+    "manufacturer": [
+        # Combined phrases — manufacturer role only
+        r"\bmanufactured\s+(?:and\s+)?packed\s+by\b",
+        r"\bmanufactured\s+&\s+packed\s+by\b",
+        r"\bmanufacturing\s+and\s+packing\s+by\b",
+        # Simple manufacturer patterns
+        r"\bmanufactured\s+by\b",
+        r"\bmanufacturer\b",
+        r"\bmfg\.?\s*by\b",
+        r"\bmfd\.?\s*by\b",
+        r"\bmanufacturing\s+unit\b",
+        # Hindi
+        r"निर्माता",
+        r"निर्मित\s*द्वारा",
+    ],
+    "packer": [
+        # Combined phrases — packer role only (marketing/distribution is NOT
+        # a regulated declaration role under LMPC; map only the packing role)
+        r"\bpacked\s+(?:and\s+|&\s+)?marketed\s+by\b",
+        r"\bpacked\s+(?:and\s+|&\s+)?distributed\s+by\b",
+        r"\bpacked\s+(?:and\s+|&\s+)?sold\s+by\b",
+        # Simple packer patterns
+        r"\bpacked\s+by\b",
+        r"\bpacker\b",
+        r"\bpackaging\s+by\b",
+        # Hindi
+        r"पैकर",
+        r"पैक\s*किया\s*(?:गया\s+)?द्वारा",
+        r"पैकिंग\s*(?:द्वारा|कर्ता)",
+    ],
+    "importer": [
+        r"\bimported\s+(?:and\s+|&\s+)?marketed\s+by\b",
+        r"\bimported\s+(?:and\s+|&\s+)?distributed\s+by\b",
+        r"\bimported\s+by\b",
+        r"\bimporter\b",
+        r"\bsole\s+importer\b",
+        r"\bauthorised\s+importer\b",
+        r"\bauthorized\s+importer\b",
+        # Hindi
+        r"आयातक",
+        r"आयात\s*किया\s*(?:गया\s+)?द्वारा",
+    ],
+}
+
+# Compiled role-alias patterns (lazy-compiled on first use, separate cache
+# from _COMPILED so entity-role and field lookups never interfere)
+_ROLE_COMPILED: dict[str, list[re.Pattern]] | None = None
+
+
+def _get_role_compiled() -> dict[str, list[re.Pattern]]:
+    global _ROLE_COMPILED
+    if _ROLE_COMPILED is None:
+        _ROLE_COMPILED = {
+            role: [re.compile(pat, re.IGNORECASE) for pat in patterns]
+            for role, patterns in ENTITY_ROLE_ALIASES.items()
+        }
+    return _ROLE_COMPILED
+
+
+def find_entity_role_in_text(text: str) -> list[tuple[int, int, str]]:
+    """Return all (start, end, role) tuples found in *text*.
+
+    Each tuple identifies a span that explicitly names an entity role
+    (manufacturer, packer, or importer).  A single text span can match
+    multiple roles only when the same span is covered by patterns from
+    different role buckets (e.g. "manufactured and packed by" will produce
+    both a manufacturer hit and a packer hit at the same position if such
+    a combined pattern is registered under both roles).
+
+    The same overlap-resolution logic as find_field_in_text() is applied
+    WITHIN each role (longer match wins), but spans from DIFFERENT roles at
+    the same position are all kept, since one text phrase can legitimately
+    name two regulated roles simultaneously.
+    """
+    compiled = _get_role_compiled()
+    # Collect all raw matches
+    raw: list[tuple[int, int, str]] = []
+    for role, patterns in compiled.items():
+        role_hits: list[tuple[int, int, str]] = []
+        for pattern in patterns:
+            for m in pattern.finditer(text):
+                role_hits.append((m.start(), m.end(), role))
+        # Within each role: sort by position then by length desc (longest wins)
+        role_hits.sort(key=lambda t: (t[0], -(t[1] - t[0])))
+        # De-duplicate overlaps within the same role
+        kept_for_role: list[tuple[int, int, str]] = []
+        for start, end, role_name in role_hits:
+            if any(
+                start < k_end and end > k_start
+                for k_start, k_end, _ in kept_for_role
+            ):
+                continue
+            kept_for_role.append((start, end, role_name))
+        raw.extend(kept_for_role)
+
+    # Sort final list by position for deterministic caller iteration
+    return sorted(raw, key=lambda t: t[0])
+
+
+# ---------------------------------------------------------------------------
 # Public normalisation entry point
 # ---------------------------------------------------------------------------
 

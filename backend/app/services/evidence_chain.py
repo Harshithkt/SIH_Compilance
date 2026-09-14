@@ -68,6 +68,18 @@ def canonical_payload(scan: Scan) -> dict:
             ],
             key=lambda v: v["rule_id"],
         ),
+        "entity_roles": sorted(
+            [
+                {
+                    "role": er.role,
+                    "entity_name": er.entity_name,
+                    "address_text": er.address_text,
+                    "extraction_status": er.extraction_status,
+                }
+                for er in (scan.entity_roles or [])
+            ],
+            key=lambda er: (er["role"], er["entity_name"] or ""),
+        ),
     }
 
 
@@ -164,7 +176,12 @@ def verify_chain(db: Session) -> dict:
             )
 
         image_path = Path(scan.image_path)
-        if image_path.exists() and sha256_file(image_path) != scan.image_sha256:
+        if not image_path.exists():
+            return broken(
+                latest.sequence,
+                f"Evidence image for scan {scan.id} is missing from disk: file {image_path} could not be found.",
+            )
+        if sha256_file(image_path) != scan.image_sha256:
             return broken(
                 latest.sequence,
                 f"Evidence image for scan {scan.id} has been modified since capture — "

@@ -12,11 +12,15 @@ import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 
 from app.config import RULES_DIR
 from app.services import quantity as qty
+
+if TYPE_CHECKING:
+    from app.services.extraction import EntityDeclaration
 
 
 @dataclass
@@ -79,8 +83,9 @@ def list_rule_versions() -> list[RulePack]:
 
 
 def get_rule_pack(version: str) -> RulePack:
+    norm = version.replace("lmpc_", "").replace("_", "-")
     for pack in list_rule_versions():
-        if pack.version == version:
+        if pack.version in (version, norm):
             return pack
     raise ValueError(f"Unknown rule version: {version}")
 
@@ -155,12 +160,14 @@ def evaluate(
     rule_pack: RulePack,
     declarations: dict[str, Declaration],
     context: dict,
+    entity_declarations: "list[EntityDeclaration] | None" = None,
 ) -> Verdict:
     """Evaluate extracted declarations against a rule pack. Returns violations with
     clause citations and evidence bounding boxes, plus an explainable overall verdict.
     """
     violations: list[dict] = []
     not_assessed: list[dict] = []
+    _entity_decls: list["EntityDeclaration"] = entity_declarations or []
 
     for rule in rule_pack.rules:
         if not _applies(rule, context):
@@ -185,6 +192,38 @@ def evaluate(
             if not decl or not decl.present:
                 continue
             passed = _check_min_height_table1(decl, rule["params"], declarations.get("net_quantity"))
+        elif check_type == "entity_role_presence":
+            # Role-aware presence check for the Phase 2 entity-role extraction.
+            #
+            # params:
+            #   role:             "manufacturer" | "packer" | "importer"
+            #   require_address:  bool (optional, default False)
+            #
+            # Design contract — separation of layers:
+            #   This check reads extraction_status as one evidence input.
+            #   The rule itself decides what constitutes compliance — the
+            #   extractor never does.  "found" vs "partial" is an extraction
+            #   signal; passing/failing is a compliance determination made here.
+            #
+            # Backward compat: if entity_declarations was not supplied (None or
+            # empty), the rule fails with passed=False, same as 'not present'.
+            params_role = rule.get("params", {}).get("role", "")
+            require_addr = rule.get("params", {}).get("require_address", False)
+            role_hits = [e for e in _entity_decls if e.role == params_role]
+            role_bbox: dict | None = None
+            if not role_hits:
+                passed = False
+            else:
+                # Pick the highest-confidence hit for this role
+                best = max(
+                    role_hits,
+                    key=lambda e: (e.ocr_confidence or 0.0),
+                )
+                role_bbox = best.bbox
+                if require_addr:
+                    passed = best.extraction_status == "found"
+                else:
+                    passed = best.extraction_status in ("found", "partial")
         elif check_type == "numeric_ratio":
             # Best-effort sanity check only; never blocks a GO verdict on its own.
             passed = True
@@ -216,6 +255,7 @@ def evaluate(
             continue
 
         if not passed:
+            violation_bbox = decl.bbox if decl else (role_bbox if check_type == "entity_role_presence" else None)
             violations.append(
                 {
                     "rule_id": rule["id"],
@@ -224,7 +264,7 @@ def evaluate(
                     "field": rule["field"],
                     "severity": rule["severity"],
                     "message": rule["message"],
-                    "bbox": decl.bbox if decl else None,
+                    "bbox": violation_bbox,
                 }
             )
 

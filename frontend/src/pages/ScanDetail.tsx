@@ -573,6 +573,62 @@ export default function ScanDetail({ officerName }: ScanDetailProps) {
             </div>
           </div>
 
+          {(scan.entity_roles || []).length > 0 && (
+            <div className="card">
+              <div className="card-head">
+                <div className="card-head-text">
+                  <h2>Entity Roles</h2>
+                  <p>Manufacturer, Packer, and Importer entity declarations with role evidence.</p>
+                </div>
+                <span className="muted">{(scan.entity_roles || []).length}</span>
+              </div>
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Role</th>
+                      <th>Entity Name</th>
+                      <th>Address</th>
+                      <th>Signal</th>
+                      <th>OCR Conf.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(scan.entity_roles || []).map((er) => (
+                      <tr key={er.id}>
+                        <td>
+                          <strong style={{ textTransform: "capitalize" }}>{er.role}</strong>
+                        </td>
+                        <td>{er.entity_name || <span className="muted">—</span>}</td>
+                        <td>{er.address_text || <span className="muted">—</span>}</td>
+                        <td>
+                          <span
+                            className={`badge ${
+                              er.extraction_status === "found"
+                                ? "badge-good"
+                                : er.extraction_status === "partial"
+                                  ? "badge-warn"
+                                  : "badge-muted"
+                            }`}
+                          >
+                            {er.extraction_status}
+                          </span>
+                        </td>
+                        <td>
+                          {er.ocr_confidence != null ? (
+                            <span className="mono">{(er.ocr_confidence * 100).toFixed(0)}%</span>
+                          ) : (
+                            <span className="muted">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           <div className="card card-pad">
             <h2 style={{ marginBottom: 6 }}>{t("review.title")}</h2>
             <p className="muted" style={{ marginTop: 0, fontSize: 12.5 }}>

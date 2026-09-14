@@ -77,6 +77,22 @@ export interface ScanReview {
   created_at: string;
 }
 
+export interface EntityRole {
+  id: string;
+  scan_id: string;
+  role: string;
+  entity_name: string | null;
+  address_text: string | null;
+  raw_value: string | null;
+  ocr_confidence: number | null;
+  extraction_confidence: number | null;
+  extraction_status: string;
+  original_ocr_text: string | null;
+  bbox: BBox | null;
+  height_px: number | null;
+  created_at: string;
+}
+
 export interface Scan {
   id: string;
   entity_id: string | null;
@@ -102,6 +118,7 @@ export interface Scan {
   officer_decision_notes: string | null;
   declarations: Declaration[];
   violations: Violation[];
+  entity_roles?: EntityRole[];
   ledger_entry: LedgerEntry | null;
   case: Case | null;
 }
