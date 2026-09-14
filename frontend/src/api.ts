@@ -30,8 +30,29 @@ export class ApiError extends Error {
   }
 }
 
+// Guards against a stalled connection (weak signal, captive portal) leaving fetch
+// pending forever — a plain connection refusal already rejects on its own, but a
+// request that is sent and never answered would otherwise hang the offline-queue
+// sync indefinitely. Kept comfortably above the backend's own Nebius vision timeout
+// (90s, see backend/app/config.py) so a slow-but-alive scan is never aborted here —
+// that would read as a network failure and re-queue a scan the backend already
+// committed, double-posting it to the ledger.
+const REQUEST_TIMEOUT_MS = 120_000;
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${BASE}${path}`, init);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(`${BASE}${path}`, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("Request timed out. Check your connection and try again.");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!response.ok) {
     let detail: unknown = null;
     try {

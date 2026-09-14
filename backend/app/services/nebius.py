@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import mimetypes
 import re
 from pathlib import Path
@@ -20,6 +21,8 @@ from pathlib import Path
 import httpx
 
 from app.config import nebius_api_key, settings
+
+logger = logging.getLogger(__name__)
 
 
 class NebiusError(RuntimeError):
@@ -86,19 +89,63 @@ def image_data_url(path: str | Path) -> str:
     return f"data:{mime};base64,{encoded}"
 
 
+def _strip_trailing_commas(text: str) -> str:
+    return re.sub(r",(\s*[}\]])", r"\1", text)
+
+
+def _close_unbalanced(text: str) -> str:
+    """Best-effort repair for output truncated mid-object (e.g. hit max_tokens)."""
+    in_string = False
+    escaped = False
+    stack: list[str] = []
+    for ch in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch in "{[":
+            stack.append(ch)
+        elif ch in "}]":
+            if stack:
+                stack.pop()
+    repaired = text
+    if in_string:
+        repaired += '"'
+    for opener in reversed(stack):
+        repaired += "}" if opener == "{" else "]"
+    return repaired
+
+
 def parse_json_response(content: str) -> dict:
-    """Models occasionally wrap JSON in prose or fences; recover the object."""
+    """Models occasionally wrap JSON in prose/fences, leave trailing commas, or get
+    truncated mid-object; recover the intended object on a best-effort basis."""
     content = content.strip()
     fenced = re.search(r"```(?:json)?\s*(.*?)```", content, re.DOTALL)
     if fenced:
         content = fenced.group(1).strip()
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError:
-        brace = re.search(r"\{.*\}", content, re.DOTALL)
-        if not brace:
-            raise NebiusError(f"Model did not return JSON: {content[:300]}")
-        return json.loads(brace.group(0))
+
+    brace = re.search(r"\{.*\}", content, re.DOTALL)
+    candidate = brace.group(0) if brace else content
+
+    for attempt in (
+        content,
+        candidate,
+        _strip_trailing_commas(candidate),
+        _close_unbalanced(_strip_trailing_commas(candidate)),
+    ):
+        try:
+            return json.loads(attempt)
+        except json.JSONDecodeError:
+            continue
+
+    logger.warning("Nebius returned unparseable JSON (%d chars): %s", len(content), content[:2000])
+    raise NebiusError(f"Model did not return valid JSON: {content[:300]}")
 
 
 READ_LABEL_PROMPT = """You are a text-recognition engine for a Legal Metrology inspection system.
@@ -150,7 +197,7 @@ def read_label(image_path: str | Path, lang: str = "en") -> list[dict]:
             }
         ],
         temperature=0.0,
-        max_tokens=3000,
+        max_tokens=4000,
         json_object=True,
     )
     parsed = parse_json_response(content)

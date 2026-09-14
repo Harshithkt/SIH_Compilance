@@ -265,7 +265,7 @@ export default function Dashboard() {
                 to="/cases"
                 icon={<IconFolder size={18} />}
                 title={t("nav.cases")}
-                sub={t("cases.subtitle")}
+                sub={t("dashboard.quickCasesSub")}
               />
               <QuickAction
                 to="/compliance"
@@ -289,7 +289,7 @@ export default function Dashboard() {
                 to="/analytics"
                 icon={<IconBarChart size={18} />}
                 title={t("nav.analytics")}
-                sub={t("analytics.subtitle")}
+                sub={t("dashboard.quickAnalyticsSub")}
               />
             </div>
           </div>
@@ -321,6 +321,7 @@ function QuickAction({
         borderRadius: "var(--radius)",
         color: "inherit",
         alignItems: "flex-start",
+        flexWrap: "nowrap",
       }}
     >
       <span
