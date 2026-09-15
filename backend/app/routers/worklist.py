@@ -4,12 +4,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.auth import get_current_user
 from app.database import get_db
 from app.models import Case, Entity, Scan
 from app.schemas import EntityOut, ScanSummaryOut
 from app.services import case_engine, compliance_report, risk_scoring
 
-router = APIRouter(prefix="/api/v1", tags=["enforcement"])
+router = APIRouter(
+    prefix="/api/v1",
+    tags=["enforcement"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get("/worklist")

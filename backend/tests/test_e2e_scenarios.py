@@ -34,6 +34,15 @@ def _create_dummy_image_bytes(text: str = "TEST LABEL") -> bytes:
     return buf.getvalue()
 
 
+@pytest.fixture(autouse=True)
+def _signed_in_officer(auth_headers):
+    """Recording an inspection requires an authenticated officer, so sign this
+    module's client in for the duration of each test."""
+    client.headers.update(auth_headers("officer"))
+    yield
+    client.headers.pop("Authorization", None)
+
+
 class TestE2EApiPipeline:
     """Step 5: End-to-end API test with image upload."""
 

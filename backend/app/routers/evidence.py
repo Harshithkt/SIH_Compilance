@@ -3,12 +3,17 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.auth import get_current_user
 from app.database import get_db
 from app.models import LedgerEntry, Scan
 from app.schemas import LedgerVerifyOut
 from app.services import docket_pdf, evidence_chain
 
-router = APIRouter(prefix="/api/v1", tags=["evidence"])
+router = APIRouter(
+    prefix="/api/v1",
+    tags=["evidence"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get("/ledger")

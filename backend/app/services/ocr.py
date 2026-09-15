@@ -4,6 +4,10 @@ Provider hierarchy (auto mode):
     Online:  NebiusVisionProvider  → PaddleOCRProvider (fallback) → TesseractOCRProvider (fallback)
     Offline: PaddleOCRProvider     → TesseractOCRProvider (fallback)
 
+The offline engine is PaddleOCR (PP-OCRv6, with PP-OCRv5 pinned for Devanagari);
+Tesseract remains behind it as the dependency-free floor, since the paddlepaddle
+runtime is a large optional install that some interpreters have no wheel for.
+
 ManualTextProvider is NEVER part of the automatic fallback chain.  It must only be
 activated by an explicit officer action (passing raw_text to the pipeline).  Silently
 converting an OCR failure into manual text would make machine OCR evidence
@@ -25,7 +29,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Any, Literal
 
 log = logging.getLogger(__name__)
 
@@ -316,116 +320,96 @@ class NebiusVisionProvider(OCRProvider):
 
 
 class PaddleOCRProvider(OCRProvider):
-    """Local OCR via PaddleOCR — primary offline provider.
+    """Local OCR via PaddleOCR (PP-OCRv5 / PP-OCRv6) — primary offline provider.
 
-    Language support (honest):
-    - English: supported, model `en`.
-    - Hindi / Devanagari: NOT reliably supported by the default PaddleOCR
-      distribution.  The `ch` (Chinese+Latin) model can occasionally recognise
-      Devanagari glyphs but has not been validated for Legal Metrology use.
-      If Hindi is requested, this provider will attempt extraction and report
-      its measured confidence honestly.  If confidence is below
-      LOW_CONFIDENCE_THRESHOLD the manager will fall back to Tesseract with
-      the `hin` language pack.
+    Speaks the PaddleOCR 3.x API — `PaddleOCR(..., ocr_version=...).predict(path)`
+    returning `rec_texts` / `rec_scores` / `rec_polys`. The 2.x API this provider used
+    to call (`use_angle_cls=`, `show_log=`, `.ocr(..., cls=True)`) no longer exists, so
+    a 2.x install is reported unavailable rather than silently mis-parsed.
 
-    Install: `pip install paddlepaddle paddleocr` (CPU) or equivalent GPU build.
-    If not installed, `is_available()` returns False and this provider is skipped.
+    Language: PP-OCRv6 covers Chinese, English, Japanese and 46 Latin-script
+    languages. Devanagari is not among them — PaddleOCR recognises Hindi with
+    `devanagari_PP-OCRv5_mobile_rec` — so a Hindi request pins PP-OCRv5 whatever
+    version is configured, and records that substitution in the result metadata.
+
+    The engine is an optional install (see requirements-paddle.txt): paddlepaddle is a
+    large download and ships no wheel for some interpreters. Without it
+    `is_available()` returns False and the chain falls through to Tesseract.
     """
 
     name = "paddleocr"
     mode: OCRMode = "offline"
-    _LANG_MAP = {
-        "en": "en",
-        "hi": "en",       # No validated Hindi model; falls through to Tesseract
-        "en+hi": "en",
-        "hi+en": "en",
-    }
+
+    # Officer-facing language hint → PaddleOCR `lang` code. A mixed English/Hindi
+    # label goes to the Devanagari model, which also recognises Latin script.
+    _LANG_MAP = {"en": "en", "hi": "hi", "en+hi": "hi", "hi+en": "hi"}
+    _DEVANAGARI_LANG = "hi"
+    _DEVANAGARI_VERSION = "PP-OCRv5"
 
     def __init__(self) -> None:
         try:
-            from paddleocr import PaddleOCR  # noqa: F401
-        except ImportError as exc:
-            raise RuntimeError("paddleocr not installed") from exc
-        self._instances: dict[str, Any] = {}
+            import paddleocr  # noqa: F401
+        except Exception as exc:  # a missing paddlepaddle runtime raises more than ImportError
+            raise RuntimeError(f"paddleocr unavailable: {exc}") from exc
+        self._engines: dict[tuple[str, str], Any] = {}
 
     def is_available(self) -> bool:
         try:
-            from paddleocr import PaddleOCR  # noqa: F401
-
-            return True
-        except ImportError:
-            return False
-
-    def _get_ocr_engine(self, paddle_lang: str) -> Any:
-        if paddle_lang not in self._instances:
             from paddleocr import PaddleOCR
-            self._instances[paddle_lang] = PaddleOCR(use_angle_cls=True, lang=paddle_lang, show_log=False)
-        return self._instances[paddle_lang]
+        except Exception:
+            return False
+        # predict() marks the 3.x API. Against a 2.x install this provider would fail
+        # deep inside parsing instead of cleanly handing over to the next provider.
+        return hasattr(PaddleOCR, "predict")
+
+    def _engine(self, paddle_lang: str, version: str) -> Any:
+        from app.config import settings
+
+        key = (paddle_lang, version)
+        if key not in self._engines:
+            from paddleocr import PaddleOCR
+
+            # Orientation classification and unwarping stay off: the pipeline already
+            # runs its own preprocessing pass, and each extra module is another model
+            # to download onto a field device.
+            self._engines[key] = PaddleOCR(
+                lang=paddle_lang,
+                ocr_version=version,
+                device=settings.paddle_device,
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
+                use_textline_orientation=settings.paddle_use_textline_orientation,
+            )
+        return self._engines[key]
 
     def extract(self, image_path: str, lang: str = "en") -> OCRResult:
+        from app.config import settings
+
         paddle_lang = self._LANG_MAP.get(lang, "en")
-        hindi_requested = lang in ("hi", "hi+en", "en+hi")
+        configured_version = settings.paddle_ocr_version
+        version = (
+            self._DEVANAGARI_VERSION
+            if paddle_lang == self._DEVANAGARI_LANG
+            else configured_version
+        )
 
-        ocr_engine = self._get_ocr_engine(paddle_lang)
-        result = ocr_engine.ocr(image_path, cls=True)
-
-        regions: list[TextBox] = []
-        if result and result[0]:
-            for item in result[0]:
-                # item: [[box_points], (text, confidence)]
-                box_points, (text, conf) = item
-                text = (text or "").strip()
-                if not text:
-                    continue
-
-                # PaddleOCR boxes are 4-point quads [[x,y]×4]; compute AABB
-                xs = [p[0] for p in box_points]
-                ys = [p[1] for p in box_points]
-                x1, y1, x2, y2 = min(xs), min(ys), max(xs), max(ys)
-
-                # We need image dimensions for relative coords
-                try:
-                    from PIL import Image as _PIL
-
-                    with _PIL.open(image_path) as _img:
-                        iw, ih = _img.size
-                    bbox: dict | None = (
-                        {
-                            "x": x1 / iw,
-                            "y": y1 / ih,
-                            "w": (x2 - x1) / iw,
-                            "h": (y2 - y1) / ih,
-                        }
-                        if iw > 0 and ih > 0
-                        else None
-                    )
-                    height_px: float | None = float(y2 - y1)
-                except Exception:
-                    bbox = None
-                    height_px = None
-
-                regions.append(
-                    TextBox(
-                        text=text,
-                        bbox=bbox,
-                        confidence=float(conf),
-                        height_px=height_px,
-                    )
-                )
+        pages = self._engine(paddle_lang, version).predict(str(image_path))
+        regions = self._regions(pages, image_path)
 
         full_text = "\n".join(r.text for r in regions)
-        valid_confs = [r.confidence for r in regions if r.confidence > 0]
-        overall_conf = sum(valid_confs) / len(valid_confs) if valid_confs else None
+        confidences = [r.confidence for r in regions if r.confidence is not None]
+        overall_conf = sum(confidences) / len(confidences) if confidences else None
 
-        meta: dict = {"paddle_lang": paddle_lang}
-        note: str | None = None
-        if hindi_requested:
-            note = (
-                "Hindi (Devanagari) was requested but PaddleOCR does not ship a "
-                "validated Hindi model. Extraction used the English model. "
-                "Low confidence will trigger Tesseract (hin) fallback."
+        meta: dict = {
+            "paddle_lang": paddle_lang,
+            "ocr_version": version,
+            "device": settings.paddle_device,
+        }
+        if version != configured_version:
+            meta["ocr_version_override"] = (
+                f"{configured_version} has no Devanagari recognition model; "
+                f"read with {version} instead."
             )
-            meta["hindi_warning"] = note
 
         return OCRResult(
             provider_used=self.name,
@@ -435,8 +419,87 @@ class PaddleOCRProvider(OCRProvider):
             regions=regions,
             confidence=overall_conf,
             processing_metadata=meta,
-            error=note,
         )
+
+    @classmethod
+    def _regions(cls, pages: Any, image_path: str) -> list[TextBox]:
+        from PIL import Image
+
+        with Image.open(image_path) as img:
+            img_w, img_h = img.size
+
+        regions: list[TextBox] = []
+        for page in pages or []:
+            payload = cls._payload(page)
+            texts = payload.get("rec_texts") or []
+            scores = payload.get("rec_scores") or []
+            # rec_polys are the recognised line quads; dt_polys are the raw detector
+            # output, used only when a build omits the former.
+            polys = payload.get("rec_polys")
+            if polys is None or len(polys) == 0:
+                polys = payload.get("dt_polys") or []
+
+            for index, raw_text in enumerate(texts):
+                text = (raw_text or "").strip()
+                if not text:
+                    continue
+                confidence = float(scores[index]) if index < len(scores) else None
+                bbox, height_px = cls._bbox(
+                    polys[index] if index < len(polys) else None, img_w, img_h
+                )
+                regions.append(
+                    TextBox(
+                        text=text,
+                        bbox=bbox,
+                        confidence=confidence,
+                        height_px=height_px,
+                        script=cls._script(text),
+                    )
+                )
+        return regions
+
+    @staticmethod
+    def _payload(page: Any) -> dict:
+        """Normalise one predict() result into a plain mapping.
+
+        PaddleOCR 3.x results behave like mappings; some builds expose the same
+        payload nested under `.json["res"]`. Both are handled because this path
+        cannot be exercised without the paddlepaddle runtime installed.
+        """
+        if isinstance(page, dict):
+            return page
+        data = getattr(page, "json", None)
+        if isinstance(data, dict):
+            return data.get("res", data)
+        return {}
+
+    @staticmethod
+    def _bbox(poly: Any, img_w: int, img_h: int) -> tuple[dict | None, float | None]:
+        """Axis-aligned box, relative to image size, from a 4-point quad."""
+        if poly is None or len(poly) == 0 or img_w <= 0 or img_h <= 0:
+            return None, None
+        xs = [float(point[0]) for point in poly]
+        ys = [float(point[1]) for point in poly]
+        x1, y1, x2, y2 = min(xs), min(ys), max(xs), max(ys)
+        if x2 <= x1 or y2 <= y1:
+            return None, None
+        return (
+            {
+                "x": x1 / img_w,
+                "y": y1 / img_h,
+                "w": (x2 - x1) / img_w,
+                "h": (y2 - y1) / img_h,
+            },
+            y2 - y1,
+        )
+
+    @staticmethod
+    def _script(text: str) -> str:
+        devanagari = any("ऀ" <= ch <= "ॿ" for ch in text)
+        latin = any(ch.isascii() and ch.isalpha() for ch in text)
+        if devanagari and latin:
+            return "mixed"
+        return "devanagari" if devanagari else "latin"
 
 
 # ---------------------------------------------------------------------------

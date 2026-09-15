@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { useAuth } from "./auth";
 import { Loading, initials } from "./components/common";
 import {
   IconBarChart,
@@ -16,12 +17,12 @@ import {
   IconSliders,
 } from "./components/icons";
 import { useI18n, type Lang } from "./i18n";
-import { useOfficerName } from "./officer";
 import { useQueueStatus } from "./offlineQueue";
 import Capture from "./pages/Capture";
 import Cases from "./pages/Cases";
 import Entity from "./pages/Entity";
 import Ledger from "./pages/Ledger";
+import Login from "./pages/Login";
 import Report from "./pages/Report";
 import Rules from "./pages/Rules";
 import ScanDetail from "./pages/ScanDetail";
@@ -47,7 +48,6 @@ const NAV_ITEMS = [
 ] as const;
 
 interface SidebarProps {
-  officerName: string;
   lang: Lang;
   setLang: (lang: Lang) => void;
   queueCount: number;
@@ -56,8 +56,10 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
-function Sidebar({ officerName, lang, setLang, queueCount, online, onNavigate, onClose }: SidebarProps) {
+function Sidebar({ lang, setLang, queueCount, online, onNavigate, onClose }: SidebarProps) {
   const { t } = useI18n();
+  const { user, logout } = useAuth();
+
   return (
     <>
       <div className="sidebar-brand">
@@ -93,20 +95,24 @@ function Sidebar({ officerName, lang, setLang, queueCount, online, onNavigate, o
 
       <div className="sidebar-foot">
         <div className="sidebar-officer">
-          <span className="officer-avatar">{initials(officerName || "?")}</span>
+          <span className="officer-avatar">{initials(user?.full_name ?? "?")}</span>
           <div className="sidebar-officer-info">
-            <strong>{officerName || "Not set"}</strong>
-            <span>{t("settings.officerName")}</span>
+            <strong>{user?.full_name ?? "—"}</strong>
+            {user && (
+              <span className="role-pill role-pill-dark">
+                {t(`auth.role.${user.role}` as never)}
+              </span>
+            )}
           </div>
         </div>
 
+        <button className="sidebar-signout" onClick={logout}>
+          {t("auth.signOut")}
+        </button>
+
         <div className="sidebar-sync">
           <span className={`sync-dot${online ? "" : " offline"}`} aria-hidden="true" />
-          {queueCount > 0
-            ? `${queueCount} held offline`
-            : online
-              ? "Synced"
-              : "Offline"}
+          {queueCount > 0 ? `${queueCount} held offline` : online ? "Synced" : "Offline"}
         </div>
 
         <div className="lang-toggle">
@@ -124,7 +130,7 @@ function Sidebar({ officerName, lang, setLang, queueCount, online, onNavigate, o
 
 export default function App() {
   const { lang, setLang } = useI18n();
-  const { name: officerName, setName: setOfficerName } = useOfficerName();
+  const { status } = useAuth();
   const queue = useQueueStatus();
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -133,8 +139,13 @@ export default function App() {
     setDrawerOpen(false);
   }, [location.pathname]);
 
+  // Nothing in the application renders until the session is known: every screen below
+  // reads case material, and a half-rendered shell behind a sign-in form invites the
+  // officer to wonder which of the two they are looking at.
+  if (status === "loading") return <Loading />;
+  if (status === "anonymous") return <Login />;
+
   const sidebarProps: SidebarProps = {
-    officerName,
     lang,
     setLang,
     queueCount: queue.count,
@@ -167,7 +178,11 @@ export default function App() {
         <>
           <div className="drawer-backdrop" onClick={() => setDrawerOpen(false)} />
           <aside className="sidebar drawer-open">
-            <Sidebar {...sidebarProps} onNavigate={() => setDrawerOpen(false)} onClose={() => setDrawerOpen(false)} />
+            <Sidebar
+              {...sidebarProps}
+              onNavigate={() => setDrawerOpen(false)}
+              onClose={() => setDrawerOpen(false)}
+            />
           </aside>
         </>
       )}
@@ -176,15 +191,9 @@ export default function App() {
         <main className="page">
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route
-              path="/inspect"
-              element={<Capture officerName={officerName} setOfficerName={setOfficerName} />}
-            />
+            <Route path="/inspect" element={<Capture />} />
             <Route path="/inspections" element={<Scans />} />
-            <Route
-              path="/inspections/:scanId"
-              element={<ScanDetail officerName={officerName} />}
-            />
+            <Route path="/inspections/:scanId" element={<ScanDetail />} />
             <Route path="/cases" element={<Cases />} />
             <Route path="/compliance" element={<Worklist />} />
             <Route path="/entities/:entityId" element={<Entity />} />
@@ -198,10 +207,7 @@ export default function App() {
                 </Suspense>
               }
             />
-            <Route
-              path="/settings"
-              element={<Settings officerName={officerName} setOfficerName={setOfficerName} />}
-            />
+            <Route path="/settings" element={<Settings />} />
             <Route path="/rules" element={<Rules />} />
           </Routes>
         </main>

@@ -24,7 +24,14 @@ class Settings(BaseSettings):
     nebius_vision_model: str = "MiniMaxAI/MiniMax-M3"
     nebius_text_model: str = "meta-llama/Llama-3.3-70B-Instruct"
     nebius_timeout_seconds: float = 90.0
-    ocr_provider: str = "auto"  # auto | nebius | tesseract | manual
+    ocr_provider: str = "auto"  # auto | nebius | paddleocr | tesseract | manual
+
+    # Offline OCR engine. PP-OCRv6 is the current generation; a Hindi capture pins
+    # PP-OCRv5 regardless, since the Devanagari recognition model ships only there.
+    paddle_ocr_version: str = "PP-OCRv6"
+    paddle_device: str = "cpu"  # "cpu" | "gpu:0" | "npu:0"
+    # Officers photograph packs at an angle often enough to be worth the extra model.
+    paddle_use_textline_orientation: bool = True
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     seed_secret: str | None = None
     # A platform like Vercel gives every preview deploy its own subdomain, which a fixed
@@ -39,10 +46,18 @@ class Settings(BaseSettings):
     # of the seller. Chosen as reasonable defaults, not derived from a specific rule.
     correction_notice_response_days: int = 15
     formal_case_response_days: int = 30
-    # There is no user/role system in this build, so an escalated case is assigned to a
-    # named role rather than a specific account — surfaced in the UI and the docket's
-    # countersignature line.
+    # An escalated case is assigned to the supervising role rather than to one named
+    # account, so the assignment survives staff changes — surfaced in the UI and on the
+    # docket's countersignature line.
     supervisor_role_name: str = "Superintendent, Legal Metrology"
+
+    # Authentication. Left unset, tokens are signed with a secret generated per process,
+    # so every officer is signed out when the server restarts — set this in deployment.
+    jwt_secret: str | None = None
+    jwt_expiry_minutes: int = 12 * 60  # a full field shift
+    # Password given to the starting accounts created on an empty database. Only ever
+    # used for that bootstrap; change it immediately in any real deployment.
+    bootstrap_password: str = "labellens-demo"
 
     model_config = {"env_prefix": "LABELLENS_", "env_file": str(BASE_DIR / ".env"), "extra": "ignore"}
 

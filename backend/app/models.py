@@ -298,3 +298,43 @@ class Case(Base):
     @property
     def product_name(self) -> str | None:
         return self.scan.product_name if self.scan else None
+
+
+class User(Base):
+    """An account that can sign in.
+
+    `role` is the only thing that grants permission — there are no per-user grants — and
+    the roles are ranked: officer < supervisor < admin, each holding everything below it.
+    `full_name` is what gets written onto reviews, corrections and case closures, so the
+    name on an evidence record always traces back to an account rather than to whatever
+    the client typed.
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    username: Mapped[str] = mapped_column(String, unique=True, index=True)
+    full_name: Mapped[str] = mapped_column(String)
+    role: Mapped[str] = mapped_column(String, default="officer")
+    password_hash: Mapped[str] = mapped_column(String)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class AuditLog(Base):
+    """Append-only record of identity-sensitive actions.
+
+    Separate from the evidence ledger on purpose: the ledger proves what a record
+    contains, this proves who did something to it and when.
+    """
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    actor_username: Mapped[str] = mapped_column(String, index=True)
+    actor_role: Mapped[str] = mapped_column(String)
+    action: Mapped[str] = mapped_column(String, index=True)
+    target_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    target_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    detail: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

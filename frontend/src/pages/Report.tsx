@@ -86,15 +86,17 @@ export default function Report() {
                 <IconPrinter size={14} />
                 {t("report.print")}
               </button>
-              <a
+              <button
                 className="btn btn-sm"
-                href={api.monthlyReportUrl(year, month)}
-                target="_blank"
-                rel="noreferrer"
+                onClick={() =>
+                  api
+                    .downloadMonthlyReport(year, month)
+                    .catch((e) => setError(e instanceof Error ? e.message : t("common.error")))
+                }
               >
                 <IconDownload size={14} />
                 {t("report.raw")}
-              </a>
+              </button>
             </div>
           )}
         </div>

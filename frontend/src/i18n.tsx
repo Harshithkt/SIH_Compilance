@@ -216,17 +216,21 @@ const STRINGS = {
     "analytics.noData": "Not enough committed inspections yet to chart.",
 
     "settings.title": "Settings",
-    "settings.subtitle": "Officer profile and system information for this device.",
+    "settings.subtitle": "Your account, language and system information.",
     "settings.officer": "Officer profile",
     "settings.officerName": "Inspecting officer",
     "settings.officerHelp":
-      "Used to attribute new inspections and corrections. Stored only on this device.",
+      "Every inspection, correction and case closure you record is attributed to this account.",
     "settings.language": "Language",
     "settings.system": "System",
     "settings.rulePack": "Active rule pack",
     "settings.provider": "Text recognition provider",
     "settings.viewRules": "View rule pack history",
     "settings.saved": "Saved",
+    "settings.password": "Password",
+    "settings.currentPassword": "Current password",
+    "settings.newPassword": "New password (at least 8 characters)",
+    "settings.changePassword": "Change password",
 
     "rules.title": "Rule packs",
     "rules.subtitle":
@@ -236,7 +240,7 @@ const STRINGS = {
     "rules.count": "Clauses",
 
     "scans.title": "Inspections",
-    "scans.subtitle": "Searchable history of every inspection recorded on this device.",
+    "scans.subtitle": "Searchable history of every inspection committed to the record.",
     "scans.search": "Search by commodity",
     "scans.all": "All verdicts",
     "scans.empty": "No inspections match.",
@@ -249,6 +253,20 @@ const STRINGS = {
     "common.confirm": "Confirm",
     "common.cancel": "Cancel",
     "common.startInspection": "New inspection",
+
+    "auth.title": "Sign in",
+    "auth.subtitle": "Inspections are recorded against your account.",
+    "auth.username": "Username",
+    "auth.password": "Password",
+    "auth.signIn": "Sign in",
+    "auth.signingIn": "Signing in…",
+    "auth.signOut": "Sign out",
+    "auth.checking": "Checking your session…",
+    "auth.sessionEnded": "Your session has ended. Sign in again.",
+    "auth.demoAccounts": "Demo accounts",
+    "auth.role.officer": "Officer",
+    "auth.role.supervisor": "Supervisor",
+    "auth.role.admin": "Administrator",
   },
   hi: {
     "app.name": "लेबललेंस",
@@ -463,16 +481,21 @@ const STRINGS = {
     "analytics.noData": "चार्ट हेतु अभी पर्याप्त प्रतिबद्ध निरीक्षण नहीं हैं।",
 
     "settings.title": "सेटिंग्स",
-    "settings.subtitle": "इस उपकरण हेतु अधिकारी प्रोफ़ाइल और प्रणाली जानकारी।",
+    "settings.subtitle": "आपका खाता, भाषा और प्रणाली जानकारी।",
     "settings.officer": "अधिकारी प्रोफ़ाइल",
     "settings.officerName": "निरीक्षक अधिकारी",
-    "settings.officerHelp": "नए निरीक्षणों और सुधारों के श्रेय हेतु प्रयुक्त। केवल इसी उपकरण पर संगृहीत।",
+    "settings.officerHelp":
+      "आपके द्वारा दर्ज प्रत्येक निरीक्षण, सुधार और प्रकरण समापन इसी खाते के नाम दर्ज होता है।",
     "settings.language": "भाषा",
     "settings.system": "प्रणाली",
     "settings.rulePack": "सक्रिय नियम संस्करण",
     "settings.provider": "पाठ पहचान प्रदाता",
     "settings.viewRules": "नियम संस्करण इतिहास देखें",
     "settings.saved": "सहेजा गया",
+    "settings.password": "पासवर्ड",
+    "settings.currentPassword": "वर्तमान पासवर्ड",
+    "settings.newPassword": "नया पासवर्ड (कम से कम 8 अक्षर)",
+    "settings.changePassword": "पासवर्ड बदलें",
 
     "rules.title": "नियम संस्करण",
     "rules.subtitle":
@@ -482,7 +505,7 @@ const STRINGS = {
     "rules.count": "नियम",
 
     "scans.title": "निरीक्षण अभिलेख",
-    "scans.subtitle": "इस उपकरण पर दर्ज प्रत्येक निरीक्षण का खोजयोग्य अभिलेख।",
+    "scans.subtitle": "अभिलेख में दर्ज प्रत्येक निरीक्षण का खोजयोग्य विवरण।",
     "scans.search": "वस्तु द्वारा खोजें",
     "scans.all": "सभी निर्णय",
     "scans.empty": "कोई निरीक्षण मेल नहीं खाता।",
@@ -495,6 +518,20 @@ const STRINGS = {
     "common.confirm": "पुष्टि करें",
     "common.cancel": "रद्द करें",
     "common.startInspection": "नया निरीक्षण",
+
+    "auth.title": "साइन इन करें",
+    "auth.subtitle": "निरीक्षण आपके खाते के नाम दर्ज किए जाते हैं।",
+    "auth.username": "उपयोगकर्ता नाम",
+    "auth.password": "पासवर्ड",
+    "auth.signIn": "साइन इन",
+    "auth.signingIn": "साइन इन हो रहा है…",
+    "auth.signOut": "साइन आउट",
+    "auth.checking": "सत्र जाँचा जा रहा है…",
+    "auth.sessionEnded": "आपका सत्र समाप्त हो गया। कृपया पुनः साइन इन करें।",
+    "auth.demoAccounts": "डेमो खाते",
+    "auth.role.officer": "निरीक्षक अधिकारी",
+    "auth.role.supervisor": "पर्यवेक्षक",
+    "auth.role.admin": "प्रशासक",
   },
 } as const;
 

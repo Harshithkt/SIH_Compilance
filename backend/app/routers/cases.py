@@ -2,12 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.auth import get_current_user, outranks, record_audit
 from app.database import get_db
-from app.models import Case
+from app.models import Case, User
 from app.schemas import CaseCloseIn, CaseOut
 from app.services import case_engine
 
-router = APIRouter(prefix="/api/v1/cases", tags=["cases"])
+router = APIRouter(
+    prefix="/api/v1/cases",
+    tags=["cases"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 def _load_case(db: Session, case_id: str) -> Case:
@@ -50,7 +55,12 @@ def get_case(case_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{case_id}/close", response_model=CaseOut)
-def close_case(case_id: str, payload: CaseCloseIn, db: Session = Depends(get_db)):
+def close_case(
+    case_id: str,
+    payload: CaseCloseIn,
+    db: Session = Depends(get_db),
+    officer: User = Depends(get_current_user),
+):
     """Close a case as resolved (the seller corrected it within the window) or
     unresolved (they did not). The outcome — including, if the case had escalated, the
     supervisor's countersignature — is what the docket and monthly report draw on, not
@@ -60,7 +70,28 @@ def close_case(case_id: str, payload: CaseCloseIn, db: Session = Depends(get_db)
         raise HTTPException(status_code=409, detail=f"Case is already {case.status}")
     if payload.resolution not in ("resolved", "unresolved"):
         raise HTTPException(status_code=422, detail="resolution must be 'resolved' or 'unresolved'")
+    # An escalated case is one the response window already ran out on: closing it is the
+    # supervisor's call, and their name is what goes on the countersignature line.
+    if case.status == "escalated" and not outranks(officer, "supervisor"):
+        raise HTTPException(
+            status_code=403,
+            detail="This case has been escalated — only a supervisor can close it.",
+        )
+
     case_engine.close_case(
-        db, case, closed_by=payload.officer_name, resolution=payload.resolution, notes=payload.notes
+        db,
+        case,
+        closed_by=officer.full_name,
+        resolution=payload.resolution,
+        notes=payload.notes,
     )
+    record_audit(
+        db,
+        actor=officer,
+        action="case.closed",
+        target_type="case",
+        target_id=case.id,
+        detail={"resolution": payload.resolution},
+    )
+    db.commit()
     return _load_case(db, case_id)

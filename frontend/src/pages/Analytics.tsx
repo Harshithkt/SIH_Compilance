@@ -20,13 +20,13 @@ import { Link } from "react-router-dom";
 // Fixed status hues — the same four colours the verdict badges use, so a bar here
 // means exactly what the badge means elsewhere. Never reused for anything else.
 const VERDICT_COLOR: Record<Verdict, string> = {
-  GO: "#0ca30c",
-  FIX: "#f2a900",
-  REVIEW: "#d03b3b",
-  PENDING: "#8a8f98",
+  GO: "var(--status-good-strong)",
+  FIX: "var(--status-warning-strong)",
+  REVIEW: "var(--status-critical-strong)",
+  PENDING: "var(--status-pending-strong)",
 };
 
-const CLAUSE_COLOR = "#2a78d6";
+const CLAUSE_COLOR = "var(--brand)";
 
 // Recharts calls this as (value, index) — a second parameter here would silently be
 // overridden by the tick's index, not a caller-supplied default, so the limit is fixed.
@@ -111,16 +111,16 @@ export default function Analytics() {
           <div className="card-pad" style={{ height: 260 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={verdictData} margin={{ top: 16, right: 12, left: 0, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="#edece8" />
+                <CartesianGrid vertical={false} stroke="var(--line-2)" />
                 <XAxis
                   dataKey="label"
-                  tick={{ fontSize: 11, fill: "#757a82" }}
-                  axisLine={{ stroke: "#e1dfda" }}
+                  tick={{ fontSize: 11, fill: "var(--ink-3)" }}
+                  axisLine={{ stroke: "var(--line)" }}
                   tickLine={false}
                 />
                 <YAxis hide />
                 <Tooltip
-                  cursor={{ fill: "#faf9f7" }}
+                  cursor={{ fill: "var(--surface-2)" }}
                   contentStyle={{
                     fontSize: 12,
                     borderRadius: 6,
@@ -132,7 +132,7 @@ export default function Analytics() {
                   {verdictData.map((entry) => (
                     <Cell key={entry.verdict} fill={VERDICT_COLOR[entry.verdict]} />
                   ))}
-                  <LabelList dataKey="count" position="top" style={{ fontSize: 12, fontWeight: 700, fill: "#16171b" }} />
+                  <LabelList dataKey="count" position="top" style={{ fontSize: 12, fontWeight: 700, fill: "var(--ink)" }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -150,20 +150,20 @@ export default function Analytics() {
                 layout="vertical"
                 margin={{ top: 4, right: 24, left: 0, bottom: 0 }}
               >
-                <CartesianGrid horizontal={false} stroke="#edece8" />
+                <CartesianGrid horizontal={false} stroke="var(--line-2)" />
                 <XAxis type="number" hide />
                 <YAxis
                   type="category"
                   dataKey="clause"
                   width={132}
                   tickFormatter={truncateClause}
-                  tick={{ fontSize: 10.5, fill: "#494d54", fontFamily: "ui-monospace, monospace" }}
-                  axisLine={{ stroke: "#e1dfda" }}
+                  tick={{ fontSize: 10.5, fill: "var(--ink-2)", fontFamily: "ui-monospace, monospace" }}
+                  axisLine={{ stroke: "var(--line)" }}
                   tickLine={false}
                   interval={0}
                 />
                 <Tooltip
-                  cursor={{ fill: "#faf9f7" }}
+                  cursor={{ fill: "var(--surface-2)" }}
                   contentStyle={{
                     fontSize: 12,
                     borderRadius: 6,
@@ -172,7 +172,7 @@ export default function Analytics() {
                   }}
                 />
                 <Bar dataKey="count" radius={[0, 4, 4, 0]} fill={CLAUSE_COLOR} maxBarSize={16}>
-                  <LabelList dataKey="count" position="right" style={{ fontSize: 11, fontWeight: 700, fill: "#16171b" }} />
+                  <LabelList dataKey="count" position="right" style={{ fontSize: 11, fontWeight: 700, fill: "var(--ink)" }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

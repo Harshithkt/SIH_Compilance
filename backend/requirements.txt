@@ -4,12 +4,14 @@ sqlalchemy==2.0.52
 pydantic==2.13.5
 pydantic-settings==2.15.0
 python-multipart==0.0.32
+PyJWT==2.14.0
+bcrypt==5.0.0
 reportlab==5.0.1
 pillow==12.3.0
 pyyaml==6.0.3
 pytest==9.1.1
 httpx==0.28.1
 pytesseract>=0.3.10
-# Optional offline OCR engine (CPU):
-# paddlepaddle>=2.5.0
-# paddleocr>=2.7.0
+# Offline OCR engine (PaddleOCR PP-OCRv5/PP-OCRv6) is an optional extra — install it
+# with `pip install -r requirements-paddle.txt`. Kept separate because paddlepaddle is
+# a several-hundred-megabyte download and publishes no wheel for every interpreter.

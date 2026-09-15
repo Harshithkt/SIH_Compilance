@@ -1,0 +1,16 @@
+# Offline OCR engine — PaddleOCR PP-OCRv5 / PP-OCRv6.
+#
+# Optional, and deliberately not in requirements.txt:
+#   * paddlepaddle is a several-hundred-megabyte download;
+#   * it publishes no wheel for every interpreter (Python 3.14, this repo's local
+#     venv, is one of them — install under 3.11/3.12 to run the engine locally);
+#   * Tesseract remains the dependency-free offline floor without it.
+#
+# Install:   pip install -r requirements-paddle.txt
+# In Docker: docker build --build-arg INSTALL_PADDLE=1 ./backend
+#
+# PP-OCRv6 arrived in paddleocr 3.7.0; 3.x is required either way, because this
+# project calls the 3.x `PaddleOCR(...).predict()` API rather than the removed
+# 2.x `.ocr(..., cls=True)`.
+paddlepaddle>=3.0.0
+paddleocr>=3.7.0

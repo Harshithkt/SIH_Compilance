@@ -34,10 +34,6 @@ import type {
   Scan,
 } from "../types";
 
-interface ScanDetailProps {
-  officerName: string;
-}
-
 type CheckStatus = "good" | "warning" | "critical" | "pending";
 
 interface CheckRow {
@@ -102,7 +98,7 @@ const CHECK_ICON: Record<CheckStatus, (props: { size?: number }) => ReactNode> =
   pending: IconHelpCircle,
 };
 
-export default function ScanDetail({ officerName }: ScanDetailProps) {
+export default function ScanDetail() {
   const { scanId } = useParams<{ scanId: string }>();
   const { t, lang } = useI18n();
 
@@ -126,6 +122,7 @@ export default function ScanDetail({ officerName }: ScanDetailProps) {
   const [closingCase, setClosingCase] = useState<"resolved" | "unresolved" | null>(null);
   const [closeNotes, setCloseNotes] = useState("");
   const [closing, setClosing] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
 
   function load() {
     if (!scanId) return;
@@ -150,6 +147,24 @@ export default function ScanDetail({ officerName }: ScanDetailProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanId]);
 
+  // The evidence photograph sits behind authentication, so it is fetched with the
+  // session token and handed to the viewer as an object URL — the browser would send
+  // no Authorization header if it loaded the API path itself.
+  useEffect(() => {
+    if (!scanId) return;
+    let objectUrl: string | null = null;
+    api
+      .scanImage(scanId)
+      .then((url) => {
+        objectUrl = url;
+        setImageUrl(url);
+      })
+      .catch(() => setImageUrl(null));
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [scanId]);
+
   function startEdit(declaration: Declaration) {
     setEditing(declaration);
     setEditValue(declaration.value ?? "");
@@ -162,7 +177,6 @@ export default function ScanDetail({ officerName }: ScanDetailProps) {
     try {
       await api.overrideDeclaration(scanId, {
         declaration_id: editing.id,
-        officer_name: officerName || "Inspecting officer",
         new_value: editValue,
         reason: editReason.trim(),
       });
@@ -181,7 +195,6 @@ export default function ScanDetail({ officerName }: ScanDetailProps) {
     setReviewing(true);
     try {
       await api.submitReview(scanId, {
-        officer_name: officerName || "Inspecting officer",
         decision: pendingDecision,
         notes: reviewNotes.trim() || undefined,
       });
@@ -200,7 +213,6 @@ export default function ScanDetail({ officerName }: ScanDetailProps) {
     setClosing(true);
     try {
       await api.closeCase(scan.case.id, {
-        officer_name: officerName || "Inspecting officer",
         resolution: closingCase,
         notes: closeNotes.trim() || undefined,
       });
@@ -265,7 +277,7 @@ export default function ScanDetail({ officerName }: ScanDetailProps) {
               {scan.ocr_provider} · {scan.ocr_mode ?? "online"}
             </span>
             {scan.ocr_fallback_from && (
-              <span className="tag" style={{ fontSize: 11, background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" }}>
+              <span className="tag tag-medium" style={{ fontSize: 11 }}>
                 Fell back from {scan.ocr_fallback_from} ({scan.ocr_fallback_reason ?? "fallback"})
               </span>
             )}
@@ -273,9 +285,16 @@ export default function ScanDetail({ officerName }: ScanDetailProps) {
         </div>
         <div className="page-head-actions">
           <VerdictBadge verdict={scan.verdict} />
-          <a className="btn btn-primary" href={api.docketUrl(scan.id)} target="_blank" rel="noreferrer">
+          <button
+            className="btn btn-primary"
+            onClick={() =>
+              api
+                .downloadDocket(scan.id)
+                .catch((e) => setError(e instanceof Error ? e.message : t("common.error")))
+            }
+          >
             {t("scan.docket")}
-          </a>
+          </button>
         </div>
       </div>
 
@@ -328,12 +347,16 @@ export default function ScanDetail({ officerName }: ScanDetailProps) {
                   width: zoom > 1 ? `${zoom * 100}%` : undefined,
                 }}
               >
-                <LabelViewer
-                  src={api.scanImageUrl(scan.id)}
-                  declarations={scan.declarations}
-                  violations={scan.violations}
-                  highlight={highlight}
-                />
+                {imageUrl ? (
+                  <LabelViewer
+                    src={imageUrl}
+                    declarations={scan.declarations}
+                    violations={scan.violations}
+                    highlight={highlight}
+                  />
+                ) : (
+                  <Loading />
+                )}
               </div>
             </div>
             <dl className="dl" style={{ marginTop: 14 }}>
@@ -364,7 +387,7 @@ export default function ScanDetail({ officerName }: ScanDetailProps) {
               <dd>
                 <span className="mono">{scan.ocr_provider}</span> · {scan.ocr_mode ? scan.ocr_mode.toUpperCase() : "ONLINE"} ({scan.ocr_lang})
                 {scan.ocr_fallback_from && (
-                  <div className="muted" style={{ fontSize: 11, marginTop: 2, color: "var(--color-warn, #d97706)" }}>
+                  <div style={{ fontSize: 11, marginTop: 2, color: "var(--status-warning)" }}>
                     Fell back from {scan.ocr_fallback_from} ({scan.ocr_fallback_reason ?? "fallback"})
                   </div>
                 )}

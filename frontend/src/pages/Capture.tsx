@@ -1,24 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, api } from "../api";
+import { useAuth } from "../auth";
 import { ConfirmDialog, Steps } from "../components/common";
 import { IconCamera, IconUpload } from "../components/icons";
 import { useI18n } from "../i18n";
 import { enqueue, useQueueStatus } from "../offlineQueue";
 import type { QualityReport } from "../types";
 
-interface CaptureProps {
-  officerName: string;
-  setOfficerName: (name: string) => void;
-}
-
-export default function Capture({ officerName, setOfficerName }: CaptureProps) {
+export default function Capture() {
   const { t, lang } = useI18n();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const fileInput = useRef<HTMLInputElement>(null);
   const queue = useQueueStatus();
 
-  const [officer, setOfficer] = useState(officerName);
   const [product, setProduct] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -78,15 +74,13 @@ export default function Capture({ officerName, setOfficerName }: CaptureProps) {
   }, []);
 
   async function submit(skipQualityGate = false) {
-    if (!file || !officer.trim()) return;
+    if (!file) return;
     setSubmitting(true);
     setError(null);
     setRejection(null);
-    setOfficerName(officer);
 
     const input = {
       image: file,
-      officerName: officer.trim(),
       lang,
       productName: product.trim() || undefined,
       gpsLat: coords?.lat,
@@ -165,15 +159,20 @@ export default function Capture({ officerName, setOfficerName }: CaptureProps) {
 
       <div className="split">
         <div className="card card-pad stack">
-          <label className="field">
-            {t("capture.officer")}
-            <input
-              type="text"
-              value={officer}
-              onChange={(e) => setOfficer(e.target.value)}
-              placeholder="Insp. R. Sharma"
-            />
-          </label>
+          {/* The officer is no longer typed in — it comes from the signed-in account —
+              but who the record will be attributed to still has to be visible before
+              they commit a photograph as evidence. */}
+          <div>
+            <div
+              style={{ fontSize: 12.5, fontWeight: 640, color: "var(--ink-2)", marginBottom: 5 }}
+            >
+              {t("capture.officer")}
+            </div>
+            <div className="row" style={{ gap: 8 }}>
+              <strong>{user?.full_name}</strong>
+              {user && <span className="role-pill">{t(`auth.role.${user.role}` as never)}</span>}
+            </div>
+          </div>
 
           <label className="field">
             {t("capture.product")}
@@ -273,7 +272,7 @@ export default function Capture({ officerName, setOfficerName }: CaptureProps) {
           <button
             className="btn btn-primary btn-lg"
             onClick={() => submit(false)}
-            disabled={!file || !officer.trim() || submitting}
+            disabled={!file || submitting}
           >
             <IconCamera size={16} />
             {submitting ? t("capture.submitting") : t("capture.submit")}

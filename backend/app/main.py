@@ -3,14 +3,19 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.auth import bootstrap_users
 from app.config import settings
-from app.database import Base, engine
-from app.routers import admin, cases, evidence, rules, scans, system, worklist
+from app.database import Base, SessionLocal, engine
+from app.routers import admin, auth, cases, evidence, rules, scans, system, worklist
+from app.schema_sync import sync_schema
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    sync_schema(engine)
+    with SessionLocal() as db:
+        bootstrap_users(db)
     yield
 
 
@@ -33,6 +38,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(scans.router)
 app.include_router(evidence.router)
 app.include_router(worklist.router)

@@ -39,12 +39,87 @@ export class ApiError extends Error {
 // committed, double-posting it to the ledger.
 const REQUEST_TIMEOUT_MS = 120_000;
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+const TOKEN_KEY = "labellens.token";
+
+/** Called when the server rejects our token, so one expired session ends everywhere
+ *  rather than only on the screen that happened to make the call. */
+let onUnauthorized: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: () => void) {
+  onUnauthorized = handler;
+}
+
+export function getToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setToken(token: string) {
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+  } catch {
+    /* private browsing — the session simply won't survive a reload */
+  }
+}
+
+export function clearToken() {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* nothing stored to remove */
+  }
+}
+
+/** Fetch a protected file and hand back an object URL.
+ *
+ *  `<img src>` and `<a href>` are plain browser requests that carry no Authorization
+ *  header, so an endpoint behind authentication — the evidence photograph, the docket
+ *  — has to be fetched here and passed on as a blob. Callers revoke the URL when they
+ *  are done with it. */
+export async function fetchObjectUrl(path: string): Promise<string> {
+  const token = getToken();
+  const response = await fetch(`${BASE}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (response.status === 401) {
+    onUnauthorized?.();
+  }
+  if (!response.ok) {
+    throw new ApiError(response.status, null, `Could not load that file (${response.status}).`);
+  }
+  return URL.createObjectURL(await response.blob());
+}
+
+export async function downloadFile(path: string, filename: string): Promise<void> {
+  const url = await fetchObjectUrl(path);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const token = getToken();
   let response: Response;
   try {
-    response = await fetch(`${BASE}${path}`, { ...init, signal: controller.signal });
+    response = await fetch(`${BASE}${path}`, {
+      ...init,
+      // Spread first so an explicit Content-Type is kept, and never set one here:
+      // a FormData body needs the browser to add its own multipart boundary.
+      headers: {
+        ...(init?.headers as Record<string, string> | undefined),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      signal: controller.signal,
+    });
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       throw new Error("Request timed out. Check your connection and try again.");
@@ -52,6 +127,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw err;
   } finally {
     clearTimeout(timeout);
+  }
+  if (response.status === 401) {
+    onUnauthorized?.();
   }
   if (!response.ok) {
     let detail: unknown = null;
@@ -73,7 +151,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export interface CaptureInput {
   image: File;
-  officerName: string;
   lang: string;
   productName?: string;
   gpsLat?: number | null;
@@ -97,7 +174,6 @@ export const api = {
   createScan: (input: CaptureInput) => {
     const form = new FormData();
     form.append("image", input.image);
-    form.append("officer_name", input.officerName);
     form.append("lang", input.lang);
     form.append("is_food_item", String(input.isFoodItem));
     form.append("is_imported", String(input.isImported));
@@ -123,9 +199,10 @@ export const api = {
 
   getScan: (id: string) => request<Scan>(`/scans/${id}`),
 
-  scanImageUrl: (id: string) => `${BASE}/scans/${id}/image`,
+  scanImage: (id: string) => fetchObjectUrl(`/scans/${id}/image`),
 
-  docketUrl: (id: string) => `${BASE}/scans/${id}/docket`,
+  downloadDocket: (id: string) =>
+    downloadFile(`/scans/${id}/docket`, `LabelLens_Docket_${id.slice(0, 8).toUpperCase()}.pdf`),
 
   ruleDiff: (id: string, targetVersion: string) =>
     request<RuleDiff>(`/scans/${id}/rule-diff?target_version=${encodeURIComponent(targetVersion)}`),
@@ -138,7 +215,7 @@ export const api = {
 
   overrideDeclaration: (
     scanId: string,
-    body: { declaration_id: string; officer_name: string; new_value: string; reason: string },
+    body: { declaration_id: string; new_value: string; reason: string },
   ) =>
     request<Override>(`/scans/${scanId}/overrides`, {
       method: "POST",
@@ -150,7 +227,7 @@ export const api = {
 
   submitReview: (
     scanId: string,
-    body: { officer_name: string; decision: OfficerDecisionValue; notes?: string },
+    body: { decision: OfficerDecisionValue; notes?: string },
   ) =>
     request<Scan>(`/scans/${scanId}/review`, {
       method: "POST",
@@ -173,7 +250,7 @@ export const api = {
 
   closeCase: (
     caseId: string,
-    body: { officer_name: string; resolution: "resolved" | "unresolved"; notes?: string },
+    body: { resolution: "resolved" | "unresolved"; notes?: string },
   ) =>
     request<Case>(`/cases/${caseId}/close`, {
       method: "POST",
@@ -190,8 +267,11 @@ export const api = {
   monthlyReport: (year: number, month: number) =>
     request<MonthlyReport>(`/reports/monthly?year=${year}&month=${month}`),
 
-  monthlyReportUrl: (year: number, month: number) =>
-    `${BASE}/reports/monthly?year=${year}&month=${month}`,
+  downloadMonthlyReport: (year: number, month: number) =>
+    downloadFile(
+      `/reports/monthly?year=${year}&month=${month}`,
+      `LabelLens_Report_${year}-${String(month).padStart(2, "0")}.json`,
+    ),
 
   ledger: () => request<LedgerRow[]>("/ledger"),
 
@@ -202,4 +282,11 @@ export const api = {
 
   ruleVersion: (version: string) =>
     request<RuleVersionSummary & { rules: Rule[] }>(`/rules/${version}`),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<unknown>("/auth/password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
 };

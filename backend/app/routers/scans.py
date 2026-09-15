@@ -5,13 +5,20 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.auth import get_current_user, record_audit, require_role
 from app.database import get_db
-from app.models import Declaration, ManualOverride, Scan
+from app.models import Declaration, ManualOverride, Scan, User
 from app.schemas import OverrideIn, OverrideOut, ReviewIn, ReviewOut, ScanOut, ScanSummaryOut
 from app.services import case_engine, evidence_chain, extraction, nebius, pipeline, rule_engine
 from app.services.pipeline import InvalidImageError, OCRFailed, QualityGateRejected
 
-router = APIRouter(prefix="/api/v1/scans", tags=["scans"])
+# Inspection records are case material: reading one requires an account, and the
+# endpoints that write to the record additionally require the officer role.
+router = APIRouter(
+    prefix="/api/v1/scans",
+    tags=["scans"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 def _load_scan(db: Session, scan_id: str) -> Scan:
@@ -35,7 +42,6 @@ def _load_scan(db: Session, scan_id: str) -> Scan:
 @router.post("", response_model=dict, status_code=201)
 async def create_scan(
     image: UploadFile = File(...),
-    officer_name: str = Form(...),
     lang: str = Form("en"),
     product_name: str | None = Form(None),
     gps_lat: float | None = Form(None),
@@ -47,6 +53,7 @@ async def create_scan(
     raw_text: str | None = Form(None),
     skip_quality_gate: bool = Form(False),
     db: Session = Depends(get_db),
+    officer: User = Depends(require_role("officer")),
 ):
     """Capture a label, evaluate it, and commit the result to the evidence ledger."""
     image_path, image_hash = pipeline.store_image(image.file, image.filename or "capture.jpg")
@@ -56,7 +63,7 @@ async def create_scan(
             db,
             image_path=image_path,
             image_sha256=image_hash,
-            officer_name=officer_name,
+            officer_name=officer.full_name,
             lang=lang,
             provider_preference=provider,
             raw_text=raw_text,
@@ -120,6 +127,16 @@ async def create_scan(
             },
         ) from exc
 
+    record_audit(
+        db,
+        actor=officer,
+        action="scan.created",
+        target_type="scan",
+        target_id=scan.id,
+        detail={"verdict": scan.verdict, "rule_version": scan.rule_version},
+    )
+    db.commit()
+
     return {
         "scan": ScanOut.model_validate(scan).model_dump(mode="json"),
         "quality": quality_report,
@@ -159,7 +176,12 @@ def get_scan_image(scan_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{scan_id}/overrides", response_model=OverrideOut, status_code=201)
-def create_override(scan_id: str, payload: OverrideIn, db: Session = Depends(get_db)):
+def create_override(
+    scan_id: str,
+    payload: OverrideIn,
+    db: Session = Depends(get_db),
+    officer: User = Depends(require_role("officer")),
+):
     """Officer correction to an extracted field.
 
     The correction is logged with its reason and the scan is re-evaluated against the
@@ -174,12 +196,20 @@ def create_override(scan_id: str, payload: OverrideIn, db: Session = Depends(get
     override = ManualOverride(
         scan_id=scan_id,
         declaration_id=declaration.id,
-        officer_name=payload.officer_name,
+        officer_name=officer.full_name,
         old_value=declaration.value,
         new_value=payload.new_value,
         reason=payload.reason,
     )
     db.add(override)
+    record_audit(
+        db,
+        actor=officer,
+        action="scan.declaration_corrected",
+        target_type="scan",
+        target_id=scan_id,
+        detail={"field": declaration.field, "reason": payload.reason},
+    )
 
     declaration.value = payload.new_value
     declaration.present = bool(payload.new_value.strip())
@@ -252,7 +282,12 @@ def list_overrides(scan_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{scan_id}/review", response_model=ScanOut)
-def review_scan(scan_id: str, payload: ReviewIn, db: Session = Depends(get_db)):
+def review_scan(
+    scan_id: str,
+    payload: ReviewIn,
+    db: Session = Depends(get_db),
+    officer: User = Depends(require_role("officer")),
+):
     """The officer's decision on this scan's AI verdict — confirm, reject, or ask for
     more evidence. Only this becomes official; the AI's own verdict is never rewritten.
     Confirming a FIX or REVIEW opens the corresponding case (see case_engine)."""
@@ -263,8 +298,17 @@ def review_scan(scan_id: str, payload: ReviewIn, db: Session = Depends(get_db)):
             detail=f"decision must be one of {case_engine.DECISIONS}",
         )
     case_engine.submit_decision(
-        db, scan, officer_name=payload.officer_name, decision=payload.decision, notes=payload.notes
+        db, scan, officer_name=officer.full_name, decision=payload.decision, notes=payload.notes
     )
+    record_audit(
+        db,
+        actor=officer,
+        action="scan.reviewed",
+        target_type="scan",
+        target_id=scan_id,
+        detail={"decision": payload.decision},
+    )
+    db.commit()
     return _load_scan(db, scan_id)
 
 

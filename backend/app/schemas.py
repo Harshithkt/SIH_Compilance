@@ -83,8 +83,10 @@ class CaseOut(BaseModel):
     countersigned_by: str | None
 
 
+# The officer on every record below is taken from the authenticated token, never from
+# the request body — the name on a review, a correction or a closure is what the
+# evidence record carries, so a client able to set it could sign another officer's name.
 class ReviewIn(BaseModel):
-    officer_name: str
     decision: str  # confirmed | rejected | needs_more_evidence
     notes: str | None = None
 
@@ -101,7 +103,6 @@ class ReviewOut(BaseModel):
 
 
 class CaseCloseIn(BaseModel):
-    officer_name: str
     resolution: str  # resolved | unresolved
     notes: str | None = None
 
@@ -190,7 +191,6 @@ class LedgerVerifyOut(BaseModel):
 
 class OverrideIn(BaseModel):
     declaration_id: str
-    officer_name: str
     new_value: str
     reason: str
 
@@ -204,4 +204,51 @@ class OverrideOut(BaseModel):
     old_value: str | None
     new_value: str | None
     reason: str
+    created_at: datetime
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    username: str
+    full_name: str
+    role: str
+    is_active: bool
+
+
+class LoginIn(BaseModel):
+    username: str
+    password: str
+
+
+class TokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_at: datetime
+    user: UserOut
+
+
+class UserCreateIn(BaseModel):
+    username: str
+    full_name: str
+    password: str
+    role: str = "officer"
+
+
+class PasswordChangeIn(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class AuditLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    actor_username: str
+    actor_role: str
+    action: str
+    target_type: str | None
+    target_id: str | None
+    detail: dict | None
     created_at: datetime
