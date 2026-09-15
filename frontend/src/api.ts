@@ -1,4 +1,6 @@
+import type { AuthUser } from "./auth";
 import type {
+  AuditEntry,
   Case,
   ChainVerification,
   EntityDetail,
@@ -257,6 +259,28 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }),
+
+  listUsers: () => request<AuthUser[]>("/auth/users"),
+
+  createUser: (body: {
+    username: string;
+    full_name: string;
+    password: string;
+    role: string;
+  }) =>
+    request<AuthUser>("/auth/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+
+  setUserActive: (username: string, active: boolean) =>
+    request<AuthUser>(
+      `/auth/users/${encodeURIComponent(username)}/active?active=${active}`,
+      { method: "POST" },
+    ),
+
+  auditLog: (limit = 100) => request<AuditEntry[]>(`/auth/audit?limit=${limit}`),
 
   worklist: () => request<WorklistItem[]>("/worklist"),
 

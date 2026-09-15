@@ -154,6 +154,9 @@ class ScanSummaryOut(BaseModel):
 
     id: str
     entity_id: str | None
+    # Who recorded it. Without this the officer's own dashboard cannot separate their
+    # work from the rest of the office's, and a supervisor cannot see who produced what.
+    officer_name: str
     verdict: str
     product_name: str | None
     captured_at: datetime

@@ -83,6 +83,7 @@ export default function Scans() {
                 <tr>
                   <th>Commodity</th>
                   <th>Status</th>
+                  <th>{t("scan.officer")}</th>
                   <th>Rules applied</th>
                   <th>Captured</th>
                 </tr>
@@ -98,6 +99,7 @@ export default function Scans() {
                     <td>
                       <VerdictBadge verdict={scan.verdict} />
                     </td>
+                    <td>{scan.officer_name}</td>
                     <td className="mono muted">{scan.rule_version}</td>
                     <td className="muted">{formatDateTime(scan.captured_at, lang)}</td>
                   </tr>

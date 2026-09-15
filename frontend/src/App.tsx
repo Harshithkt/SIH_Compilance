@@ -1,10 +1,11 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
-import { useAuth } from "./auth";
-import { Loading, initials } from "./components/common";
+import { useAuth, type Role } from "./auth";
+import { EmptyState, Loading, initials } from "./components/common";
 import {
   IconBarChart,
   IconCamera,
+  IconClock,
   IconClose,
   IconDashboard,
   IconFileText,
@@ -15,9 +16,11 @@ import {
   IconPlus,
   IconShieldCheck,
   IconSliders,
+  IconUsers,
 } from "./components/icons";
 import { useI18n, type Lang } from "./i18n";
 import { useQueueStatus } from "./offlineQueue";
+import Audit from "./pages/Audit";
 import Capture from "./pages/Capture";
 import Cases from "./pages/Cases";
 import Entity from "./pages/Entity";
@@ -28,6 +31,7 @@ import Rules from "./pages/Rules";
 import ScanDetail from "./pages/ScanDetail";
 import Scans from "./pages/Scans";
 import Settings from "./pages/Settings";
+import Team from "./pages/Team";
 import Dashboard from "./pages/Dashboard";
 import Worklist from "./pages/Worklist";
 
@@ -36,7 +40,16 @@ import Worklist from "./pages/Worklist";
 // adding its weight to every page on a poor-connectivity field connection.
 const Analytics = lazy(() => import("./pages/Analytics"));
 
-const NAV_ITEMS = [
+interface NavItem {
+  to: string;
+  key: string;
+  icon: (props: { size?: number }) => ReactNode;
+  end: boolean;
+  /** Minimum role. Absent means every signed-in account sees it. */
+  role?: Role;
+}
+
+const NAV_ITEMS: NavItem[] = [
   { to: "/", key: "nav.dashboard", icon: IconDashboard, end: true },
   { to: "/inspections", key: "nav.inspections", icon: IconList, end: false },
   { to: "/cases", key: "nav.cases", icon: IconFolder, end: false },
@@ -44,8 +57,30 @@ const NAV_ITEMS = [
   { to: "/evidence", key: "nav.evidence", icon: IconLock, end: false },
   { to: "/reports", key: "nav.reports", icon: IconFileText, end: false },
   { to: "/analytics", key: "nav.analytics", icon: IconBarChart, end: false },
+  { to: "/audit", key: "nav.audit", icon: IconClock, end: false, role: "supervisor" },
+  { to: "/team", key: "nav.team", icon: IconUsers, end: false, role: "admin" },
   { to: "/settings", key: "nav.settings", icon: IconSliders, end: false },
-] as const;
+];
+
+/** Keeps a page from rendering for a role the API would refuse anyway — typing the
+ *  URL should land on an explanation, not on a screen that only produces 403s. */
+function RequireRole({ role, children }: { role: Role; children: ReactNode }) {
+  const { can } = useAuth();
+  const { t } = useI18n();
+
+  if (!can(role)) {
+    return (
+      <div className="card">
+        <EmptyState
+          icon={<IconLock size={20} />}
+          title={t("role.restricted")}
+          body={t("role.restrictedBody")}
+        />
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
 
 interface SidebarProps {
   lang: Lang;
@@ -58,7 +93,8 @@ interface SidebarProps {
 
 function Sidebar({ lang, setLang, queueCount, online, onNavigate, onClose }: SidebarProps) {
   const { t } = useI18n();
-  const { user, logout } = useAuth();
+  const { user, logout, can } = useAuth();
+  const visibleItems = NAV_ITEMS.filter((item) => !item.role || can(item.role));
 
   return (
     <>
@@ -85,10 +121,10 @@ function Sidebar({ lang, setLang, queueCount, online, onNavigate, onClose }: Sid
       </div>
 
       <nav className="sidebar-nav">
-        {NAV_ITEMS.map(({ to, key, icon: Icon, end }) => (
+        {visibleItems.map(({ to, key, icon: Icon, end }) => (
           <NavLink key={to} to={to} end={end} onClick={onNavigate}>
             <Icon size={16} />
-            {t(key)}
+            {t(key as never)}
           </NavLink>
         ))}
       </nav>
@@ -205,6 +241,22 @@ export default function App() {
                 <Suspense fallback={<Loading />}>
                   <Analytics />
                 </Suspense>
+              }
+            />
+            <Route
+              path="/audit"
+              element={
+                <RequireRole role="supervisor">
+                  <Audit />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="/team"
+              element={
+                <RequireRole role="admin">
+                  <Team />
+                </RequireRole>
               }
             />
             <Route path="/settings" element={<Settings />} />

@@ -126,6 +126,7 @@ export interface Scan {
 export interface ScanSummary {
   id: string;
   entity_id: string | null;
+  officer_name: string;
   verdict: Verdict;
   product_name: string | null;
   captured_at: string;
@@ -234,6 +235,20 @@ export interface EntityDetail {
   pending_response_count: number;
   top_clauses: { clause: string; count: number }[];
   scans: ScanSummary[];
+}
+
+/** One entry from the append-only record of identity-sensitive actions. Separate
+ *  from the evidence ledger: that proves what a record contains, this proves who
+ *  did something to it. */
+export interface AuditEntry {
+  id: string;
+  actor_username: string;
+  actor_role: string;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  detail: Record<string, unknown> | null;
+  created_at: string;
 }
 
 export interface MonthlyReport {

@@ -23,6 +23,7 @@ import {
   IconZoomIn,
   IconZoomOut,
 } from "../components/icons";
+import { useAuth } from "../auth";
 import { fieldLabel, useI18n } from "../i18n";
 import type {
   Declaration,
@@ -101,6 +102,7 @@ const CHECK_ICON: Record<CheckStatus, (props: { size?: number }) => ReactNode> =
 export default function ScanDetail() {
   const { scanId } = useParams<{ scanId: string }>();
   const { t, lang } = useI18n();
+  const { can } = useAuth();
 
   const [scan, setScan] = useState<Scan | null>(null);
   const [rules, setRules] = useState<Rule[] | null>(null);
@@ -260,6 +262,14 @@ export default function ScanDetail() {
   if (!scan) return <Loading />;
 
   const otherVersions = versions.filter((v) => v.version !== scan.rule_version);
+
+  // An escalated case is the supervisor's to close — the API enforces that, and
+  // offering an officer a button that can only come back 403 is worse than not
+  // offering it at all.
+  const caseIsOpen =
+    scan.case?.status === "open" || scan.case?.status === "escalated";
+  const canCloseCase =
+    caseIsOpen && (scan.case?.status !== "escalated" || can("supervisor"));
 
   return (
     <>
@@ -770,7 +780,13 @@ export default function ScanDetail() {
                 )}
               </dl>
 
-              {(scan.case.status === "open" || scan.case.status === "escalated") &&
+              {caseIsOpen && !canCloseCase && (
+                <p className="muted" style={{ fontSize: 12.5, marginTop: 10, marginBottom: 0 }}>
+                  {t("case.supervisorOnly")}
+                </p>
+              )}
+
+              {canCloseCase &&
                 (closingCase ? (
                   <div className="stack" style={{ gap: 8, marginTop: 10 }}>
                     <textarea
