@@ -112,8 +112,6 @@ export interface Scan {
   product_name: string | null;
   is_food_item: boolean;
   is_imported: boolean;
-  source_type?: "PHYSICAL_LABEL" | "ECOMMERCE_LISTING";
-  inspection_visit_id?: string | null;
   officer_decision: OfficerDecisionValue | null;
   officer_decision_by: string | null;
   officer_decision_at: string | null;
@@ -123,7 +121,6 @@ export interface Scan {
   entity_roles?: EntityRole[];
   ledger_entry: LedgerEntry | null;
   case: Case | null;
-  physical_verifications?: PhysicalVerification[];
 }
 
 export interface ScanSummary {
@@ -264,155 +261,3 @@ export interface MonthlyReport {
   generated_at: string;
   note: string;
 }
-
-// -------------------------------------------------------
-// P0 Physical Verification
-// -------------------------------------------------------
-export type PhysicalVerificationResult = "PASS" | "FAIL" | "REVIEW" | "NOT_ASSESSABLE";
-
-export interface PhysicalVerification {
-  id: string;
-  scan_id: string;
-  case_id: string | null;
-  entity_id: string | null;
-  sample_number: number;
-  declared_quantity: string;
-  declared_unit: string;
-  observed_quantity: number;
-  observed_unit: string;
-  normalized_declared_quantity: number;
-  normalized_observed_quantity: number;
-  shortfall: number;
-  applicable_rule_id: string;
-  applicable_rule_version: string;
-  applicable_mpe: number;
-  tolerance_basis: "percentage" | "absolute";
-  result: PhysicalVerificationResult;
-  verification_status: "CONFIRMED" | "DRAFT";
-  officer_username: string;
-  timestamp: string;
-  notes: string | null;
-  calculation_details: Record<string, unknown> | null;
-  evidence_hash: string | null;
-}
-
-export interface PhysicalVerificationCreate {
-  scan_id: string;
-  case_id?: string;
-  sample_number?: number;
-  declared_quantity: string;
-  declared_unit: string;
-  observed_quantity: number;
-  observed_unit: string;
-  notes?: string;
-}
-
-// -------------------------------------------------------
-// P1 Price Anomaly Signal
-// -------------------------------------------------------
-export type PriceAnomalySignal = "NO_SIGNAL" | "LOW_SIGNAL" | "REVIEW" | "INSUFFICIENT_HISTORY";
-
-export interface PriceAnomaly {
-  scan_id: string;
-  product_name: string | null;
-  category: string | null;
-  price: number | null;
-  declared_quantity: string | null;
-  unit_price: number | null;
-  historical_avg_unit_price: number | null;
-  historical_sample_count: number;
-  signal: PriceAnomalySignal;
-  explanation: string;
-  disclaimer: string;
-}
-
-// -------------------------------------------------------
-// P2 Contact Validation
-// -------------------------------------------------------
-export type ValidationStatus = "PASS" | "FAIL" | "NOT_ASSESSABLE";
-
-export interface ContactValidation {
-  scan_id: string;
-  phone: string | null;
-  phone_status: ValidationStatus;
-  phone_message: string | null;
-  email: string | null;
-  email_status: ValidationStatus;
-  email_message: string | null;
-  disclaimer: string;
-}
-
-// -------------------------------------------------------
-// P2 Multi-Unit Consistency
-// -------------------------------------------------------
-export type ConsistencyStatus = "CONSISTENT" | "INCONSISTENT" | "INSUFFICIENT_EVIDENCE";
-
-export interface MultiUnitConsistency {
-  inspection_visit_id: string;
-  unit_count: number;
-  status: ConsistencyStatus;
-  differing_declarations: Array<{
-    field: string;
-    detected_values: string[];
-    breakdown: Record<string, string>;
-    message: string;
-  }>;
-  explanation: string;
-}
-
-// -------------------------------------------------------
-// P2 Historical Enforcement Signal
-// -------------------------------------------------------
-export type HistorySignalLevel =
-  | "NO_PRIOR_ADVERSE"
-  | "PRIOR_ADVERSE_EXISTS"
-  | "REPEAT_HISTORY_INDICATED";
-
-export interface HistorySignal {
-  entity_id: string;
-  entity_name: string;
-  total_cases: number;
-  adverse_cases: number;
-  repeat_count: number;
-  signal_level: HistorySignalLevel;
-  display_message: string;
-  disclaimer: string;
-}
-
-// -------------------------------------------------------
-// P2 Public Aggregate Dashboard
-// -------------------------------------------------------
-export interface DistrictMetric {
-  district: string;
-  total_inspections: number;
-  compliant_count: number;
-  non_compliant_count: number;
-  review_count: number;
-  compliance_rate_percent: number;
-}
-
-export interface CategoryMetric {
-  category: string;
-  total_inspections: number;
-  compliant_count: number;
-  non_compliant_count: number;
-  review_count: number;
-  compliance_rate_percent: number;
-}
-
-export interface PublicAggregate {
-  total_inspections: number;
-  compliant_count: number;
-  non_compliant_count: number;
-  review_count: number;
-  compliance_rate_percent: number;
-  districts: DistrictMetric[];
-  categories: CategoryMetric[];
-  disclaimer: string;
-}
-
-// -------------------------------------------------------
-// Extended Scan with new fields
-// -------------------------------------------------------
-export type SourceType = "PHYSICAL_LABEL" | "ECOMMERCE_LISTING";
-

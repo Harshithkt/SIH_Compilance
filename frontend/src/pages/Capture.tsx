@@ -21,7 +21,6 @@ export default function Capture() {
   const [dragOver, setDragOver] = useState(false);
   const [isFood, setIsFood] = useState(true);
   const [isImported, setIsImported] = useState(false);
-  const [sourceType, setSourceType] = useState<"PHYSICAL_LABEL" | "ECOMMERCE_LISTING">("PHYSICAL_LABEL");
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [rawText, setRawText] = useState("");
@@ -88,7 +87,6 @@ export default function Capture() {
       gpsLon: coords?.lon,
       isFoodItem: isFood,
       isImported: isImported,
-      sourceType: sourceType,
       rawText: rawText.trim() || undefined,
       skipQualityGate,
     };
@@ -199,32 +197,6 @@ export default function Capture() {
               />
               {t("capture.imported")}
             </label>
-          </div>
-
-          <div className="field">
-            <span style={{ fontSize: 13, fontWeight: 600 }}>Inspection Source</span>
-            <div className="row" style={{ gap: 16, marginTop: 4 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
-                <input
-                  type="radio"
-                  name="sourceType"
-                  value="PHYSICAL_LABEL"
-                  checked={sourceType === "PHYSICAL_LABEL"}
-                  onChange={() => setSourceType("PHYSICAL_LABEL")}
-                />
-                Physical Label Scan
-              </label>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
-                <input
-                  type="radio"
-                  name="sourceType"
-                  value="ECOMMERCE_LISTING"
-                  checked={sourceType === "ECOMMERCE_LISTING"}
-                  onChange={() => setSourceType("ECOMMERCE_LISTING")}
-                />
-                E-commerce Listing Screenshot
-              </label>
-            </div>
           </div>
 
           <div className="field">

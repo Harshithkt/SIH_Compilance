@@ -150,8 +150,6 @@ def run_scan(
     rule_version: str | None = None,
     skip_quality_gate: bool = False,
     captured_at: datetime | None = None,
-    source_type: str = "direct",
-    inspection_visit_id: str | None = None,
 ) -> tuple[Scan, dict]:
     """Run the full inspection pipeline.
 
@@ -268,8 +266,6 @@ def run_scan(
         product_name=product_name,
         is_food_item=is_food_item,
         is_imported=is_imported,
-        source_type=source_type,
-        inspection_visit_id=inspection_visit_id,
     )
     db.add(scan)
     db.flush()

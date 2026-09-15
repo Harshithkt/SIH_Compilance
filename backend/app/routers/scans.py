@@ -31,7 +31,6 @@ def _load_scan(db: Session, scan_id: str) -> Scan:
             selectinload(Scan.ledger_entries),
             selectinload(Scan.entity),
             selectinload(Scan.case),
-            selectinload(Scan.physical_verifications),
         )
         .where(Scan.id == scan_id)
     ).scalar_one_or_none()
@@ -49,8 +48,6 @@ async def create_scan(
     gps_lon: float | None = Form(None),
     is_food_item: bool = Form(False),
     is_imported: bool = Form(False),
-    source_type: str = Form("PHYSICAL_LABEL"),
-    inspection_visit_id: str | None = Form(None),
     rule_version: str | None = Form(None),
     provider: str | None = Form(None),
     raw_text: str | None = Form(None),
@@ -75,8 +72,6 @@ async def create_scan(
             product_name=product_name,
             is_food_item=is_food_item,
             is_imported=is_imported,
-            source_type=source_type,
-            inspection_visit_id=inspection_visit_id,
             rule_version=rule_version,
             skip_quality_gate=skip_quality_gate,
         )

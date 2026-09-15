@@ -29,7 +29,6 @@ import ScanDetail from "./pages/ScanDetail";
 import Scans from "./pages/Scans";
 import Settings from "./pages/Settings";
 import Dashboard from "./pages/Dashboard";
-import PublicDashboard from "./pages/PublicDashboard";
 import Worklist from "./pages/Worklist";
 
 // Recharts is the single heaviest dependency in the bundle; officers mostly capture
@@ -143,10 +142,6 @@ export default function App() {
   // Nothing in the application renders until the session is known: every screen below
   // reads case material, and a half-rendered shell behind a sign-in form invites the
   // officer to wonder which of the two they are looking at.
-  if (location.pathname === "/public-dashboard") {
-    return <PublicDashboard />;
-  }
-
   if (status === "loading") return <Loading />;
   if (status === "anonymous") return <Login />;
 

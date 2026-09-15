@@ -63,8 +63,6 @@ class Scan(Base):
     product_name: Mapped[str | None] = mapped_column(String, nullable=True)
     is_food_item: Mapped[bool] = mapped_column(Boolean, default=False)
     is_imported: Mapped[bool] = mapped_column(Boolean, default=False)
-    source_type: Mapped[str] = mapped_column(String, default="PHYSICAL_LABEL")  # PHYSICAL_LABEL | ECOMMERCE_LISTING
-    inspection_visit_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
 
     # The AI's verdict above is never overwritten by review. The officer's decision on
     # it is a separate, later fact: confirmed (the finding stands and, if it is a FIX or
@@ -99,9 +97,6 @@ class Scan(Base):
     )
     case: Mapped["Case | None"] = relationship(
         back_populates="scan", uselist=False, cascade="all, delete-orphan"
-    )
-    physical_verifications: Mapped[list["PhysicalVerification"]] = relationship(
-        back_populates="scan", cascade="all, delete-orphan"
     )
 
     @property
@@ -343,42 +338,3 @@ class AuditLog(Base):
     target_id: Mapped[str | None] = mapped_column(String, nullable=True)
     detail: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-
-
-class PhysicalVerification(Base):
-    """Record of physical weighing/measurement comparison against Rule 22 MPE tolerance tables."""
-
-    __tablename__ = "physical_verifications"
-
-    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
-    scan_id: Mapped[str] = mapped_column(ForeignKey("scans.id"), index=True)
-    case_id: Mapped[str | None] = mapped_column(ForeignKey("cases.id"), nullable=True)
-    entity_id: Mapped[str | None] = mapped_column(ForeignKey("entities.id"), nullable=True)
-    sample_number: Mapped[int] = mapped_column(Integer, default=1)
-
-    declared_quantity: Mapped[str] = mapped_column(String)
-    declared_unit: Mapped[str] = mapped_column(String)
-    observed_quantity: Mapped[float] = mapped_column(Float)
-    observed_unit: Mapped[str] = mapped_column(String)
-
-    normalized_declared_quantity: Mapped[float] = mapped_column(Float)  # base unit (g/ml/cm/n)
-    normalized_observed_quantity: Mapped[float] = mapped_column(Float)  # base unit (g/ml/cm/n)
-    shortfall: Mapped[float] = mapped_column(Float)  # normalized shortfall (declared - observed)
-
-    applicable_rule_id: Mapped[str] = mapped_column(String, default="LMPC-RULE-22")
-    applicable_rule_version: Mapped[str] = mapped_column(String, default="2011-v1")
-    applicable_mpe: Mapped[float] = mapped_column(Float)  # mpe value in base unit
-    tolerance_basis: Mapped[str] = mapped_column(String)  # percentage | absolute
-    
-    result: Mapped[str] = mapped_column(String)  # PASS | FAIL | REVIEW | NOT_ASSESSABLE
-    verification_status: Mapped[str] = mapped_column(String, default="CONFIRMED")  # DRAFT | CONFIRMED
-    officer_username: Mapped[str] = mapped_column(String)
-    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-    notes: Mapped[str | None] = mapped_column(String, nullable=True)
-    calculation_details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    evidence_hash: Mapped[str | None] = mapped_column(String, nullable=True)
-
-    scan: Mapped["Scan"] = relationship(back_populates="physical_verifications")
-    case: Mapped["Case | None"] = relationship()
-    entity: Mapped["Entity | None"] = relationship()
-

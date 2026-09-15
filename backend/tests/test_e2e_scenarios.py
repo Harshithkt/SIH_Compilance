@@ -35,9 +35,9 @@ def _create_dummy_image_bytes(text: str = "TEST LABEL") -> bytes:
 
 
 @pytest.fixture(autouse=True)
-def _signed_in_officer(client, auth_headers):
+def _signed_in_officer(auth_headers):
     """Recording an inspection requires an authenticated officer, so sign this
-    client in for the duration of each test."""
+    module's client in for the duration of each test."""
     client.headers.update(auth_headers("officer"))
     yield
     client.headers.pop("Authorization", None)
@@ -46,7 +46,7 @@ def _signed_in_officer(client, auth_headers):
 class TestE2EApiPipeline:
     """Step 5: End-to-end API test with image upload."""
 
-    def test_e2e_api_scan_endpoint(self, client):
+    def test_e2e_api_scan_endpoint(self):
         img_bytes = _create_dummy_image_bytes("MFG BY Apex Foods, Delhi")
         response = client.post(
             "/api/v1/scans",
@@ -131,7 +131,7 @@ class TestLabelScenarios:
         assert "manufacturer" in detected_roles
         assert "packer" in detected_roles
 
-    def test_scenario_h_low_quality_unreadable(self, client):
+    def test_scenario_h_low_quality_unreadable(self):
         """Unreadable image produces low confidence or missing declarations gracefully."""
         img_bytes = _create_dummy_image_bytes("x")
         response = client.post(
@@ -145,7 +145,7 @@ class TestLabelScenarios:
         assert scan["verdict"] in ("FIX", "REVIEW", "PENDING")
         assert "declarations" in scan
 
-    def test_scenario_k_image_with_no_relevant_declarations(self, client):
+    def test_scenario_k_image_with_no_relevant_declarations(self):
         """Image without label declarations returns appropriate review/not-assessed behavior."""
         img_bytes = _create_dummy_image_bytes("Random non-label text pattern")
         response = client.post(
