@@ -269,7 +269,7 @@ function OfficerDashboard() {
 // ---------------------------------------------------------------------------
 
 function SupervisorDashboard() {
-  const { t, lang } = useI18n();
+  const { t } = useI18n();
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [scans, setScans] = useState<ScanSummary[] | null>(null);

@@ -22,7 +22,10 @@ class Settings(BaseSettings):
     # the Devanagari label exactly, and was the fastest. Kimi-K2.7-Code and Gemma 3 are
     # the closest alternatives if it is unavailable.
     nebius_vision_model: str = "MiniMaxAI/MiniMax-M3"
-    nebius_text_model: str = "meta-llama/Llama-3.3-70B-Instruct"
+    # Plain-language explanation of a finding, English or Hindi. Chosen by testing the
+    # account's live catalogue: it answered correctly in Devanagari and was the fastest
+    # of the candidates, which matters because an officer waits on this call.
+    nebius_text_model: str = "google/gemma-3-27b-it"
     nebius_timeout_seconds: float = 90.0
     ocr_provider: str = "auto"  # auto | nebius | paddleocr | tesseract | manual
 
