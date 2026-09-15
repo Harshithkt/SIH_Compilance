@@ -14,6 +14,7 @@ import {
   formatDateTime,
   shortHash,
 } from "../components/common";
+import PhysicalVerificationPanel from "../components/PhysicalVerification";
 import {
   IconAlertTriangle,
   IconArrowRight,
@@ -25,9 +26,12 @@ import {
 } from "../components/icons";
 import { fieldLabel, useI18n } from "../i18n";
 import type {
+  ContactValidation,
   Declaration,
+  HistorySignal,
   OfficerDecisionValue,
   Override,
+  PriceAnomaly,
   Rule,
   RuleDiff,
   RuleVersionSummary,
@@ -123,6 +127,9 @@ export default function ScanDetail() {
   const [closeNotes, setCloseNotes] = useState("");
   const [closing, setClosing] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [priceSignal, setPriceSignal] = useState<PriceAnomaly | null>(null);
+  const [contactVal, setContactVal] = useState<ContactValidation | null>(null);
+  const [historySignal, setHistorySignal] = useState<HistorySignal | null>(null);
 
   function load() {
     if (!scanId) return;
@@ -146,6 +153,18 @@ export default function ScanDetail() {
       .catch(() => setVersions([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanId]);
+
+  useEffect(() => {
+    if (!scanId) return;
+    api.getPriceSignal(scanId).then(setPriceSignal).catch(() => setPriceSignal(null));
+    api.getContactValidation(scanId).then(setContactVal).catch(() => setContactVal(null));
+  }, [scanId]);
+
+  useEffect(() => {
+    if (scan?.entity_id) {
+      api.getHistorySignal(scan.entity_id).then(setHistorySignal).catch(() => setHistorySignal(null));
+    }
+  }, [scan?.entity_id]);
 
   // The evidence photograph sits behind authentication, so it is fetched with the
   // session token and handed to the viewer as an object URL — the browser would send
@@ -276,6 +295,15 @@ export default function ScanDetail() {
             <span className="tag" style={{ fontSize: 11, textTransform: "uppercase" }}>
               {scan.ocr_provider} · {scan.ocr_mode ?? "online"}
             </span>
+            {scan.source_type === "ECOMMERCE_LISTING" ? (
+              <span className="tag tag-warn" style={{ fontSize: 11, fontWeight: 600 }}>
+                E-Commerce Listing Screenshot
+              </span>
+            ) : (
+              <span className="tag" style={{ fontSize: 11 }}>
+                Physical Label
+              </span>
+            )}
             {scan.ocr_fallback_from && (
               <span className="tag tag-medium" style={{ fontSize: 11 }}>
                 Fell back from {scan.ocr_fallback_from} ({scan.ocr_fallback_reason ?? "fallback"})
@@ -651,6 +679,84 @@ export default function ScanDetail() {
               </div>
             </div>
           )}
+
+          <div className="card card-pad">
+            <h2 style={{ marginBottom: 4 }}>Enforcement Intelligence & Signals</h2>
+            <p className="muted" style={{ marginTop: 0, fontSize: 12.5, marginBottom: 14 }}>
+              Internal analytical signals to assist officer evaluation. These do not constitute legal determinations or override deterministic rule checks.
+            </p>
+
+            {scan.source_type === "ECOMMERCE_LISTING" && (
+              <div className="banner banner-warn" style={{ marginBottom: 12, fontSize: 12.5 }}>
+                <strong>E-commerce Listing Screenshot:</strong> This scan represents a digital marketplace listing screenshot rather than a physical package label. Legal Metrology digital declaration guidelines apply.
+              </div>
+            )}
+
+            <div className="stack" style={{ gap: 10 }}>
+              {/* Contact Validation */}
+              <div style={{ padding: "10px 12px", background: "var(--bg-subtle, #f8f9fa)", borderRadius: 6, border: "1px solid var(--border, #e5e7eb)" }}>
+                <div className="row" style={{ justifyContent: "space-between", marginBottom: 4 }}>
+                  <strong style={{ fontSize: 13 }}>Consumer Care Contact Syntax</strong>
+                  <span className="tag" style={{ fontSize: 11 }}>
+                    Phone: {contactVal?.phone_status ?? "CHECKING"} · Email: {contactVal?.email_status ?? "CHECKING"}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12.5 }} className="muted">
+                  {contactVal?.phone_message || contactVal?.email_message ? (
+                    <>
+                      {contactVal.phone_message && <div>{contactVal.phone_message}</div>}
+                      {contactVal.email_message && <div>{contactVal.email_message}</div>}
+                    </>
+                  ) : (
+                    "Evaluating consumer care phone and email format syntax..."
+                  )}
+                </div>
+              </div>
+
+              {/* Price Anomaly */}
+              <div style={{ padding: "10px 12px", background: "var(--bg-subtle, #f8f9fa)", borderRadius: 6, border: "1px solid var(--border, #e5e7eb)" }}>
+                <div className="row" style={{ justifyContent: "space-between", marginBottom: 4 }}>
+                  <strong style={{ fontSize: 13 }}>Internal Price-Per-Unit Signal</strong>
+                  {priceSignal && (
+                    <span className={`tag ${priceSignal.signal === "REVIEW" ? "tag-critical" : priceSignal.signal === "LOW_SIGNAL" ? "tag-medium" : ""}`} style={{ fontSize: 11 }}>
+                      {priceSignal.signal}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: 12.5 }} className="muted">
+                  {priceSignal ? priceSignal.explanation : "Evaluating unit price distribution against historical inspection data..."}
+                </div>
+              </div>
+
+              {/* History Signal */}
+              {scan.entity_id && (
+                <div style={{ padding: "10px 12px", background: "var(--bg-subtle, #f8f9fa)", borderRadius: 6, border: "1px solid var(--border, #e5e7eb)" }}>
+                  <div className="row" style={{ justifyContent: "space-between", marginBottom: 4 }}>
+                    <strong style={{ fontSize: 13 }}>Historical Enforcement Record</strong>
+                    {historySignal && (
+                      <span className={`tag ${historySignal.signal_level === "REPEAT_HISTORY_INDICATED" ? "tag-medium" : ""}`} style={{ fontSize: 11 }}>
+                        {historySignal.signal_level}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12.5 }} className="muted">
+                    {historySignal ? historySignal.display_message : "Checking entity case history..."}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {(() => {
+            const netQtyDecl = scan.declarations.find((d) => d.field === "net_quantity");
+            return (
+              <PhysicalVerificationPanel
+                scanId={scan.id}
+                declaredQuantity={netQtyDecl?.value ?? null}
+                declaredUnit={null}
+              />
+            );
+          })()}
 
           <div className="card card-pad">
             <h2 style={{ marginBottom: 6 }}>{t("review.title")}</h2>

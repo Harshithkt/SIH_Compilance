@@ -1,11 +1,18 @@
 import type {
   Case,
   ChainVerification,
+  ContactValidation,
   EntityDetail,
+  HistorySignal,
   MonthlyReport,
+  MultiUnitConsistency,
   Override,
   LedgerRow,
   OfficerDecisionValue,
+  PhysicalVerification,
+  PhysicalVerificationCreate,
+  PriceAnomaly,
+  PublicAggregate,
   Rule,
   RuleDiff,
   RuleVersionSummary,
@@ -157,6 +164,8 @@ export interface CaptureInput {
   gpsLon?: number | null;
   isFoodItem: boolean;
   isImported: boolean;
+  sourceType?: "PHYSICAL_LABEL" | "ECOMMERCE_LISTING";
+  inspectionVisitId?: string | null;
   rawText?: string;
   skipQualityGate?: boolean;
 }
@@ -180,6 +189,8 @@ export const api = {
     if (input.productName) form.append("product_name", input.productName);
     if (input.gpsLat != null) form.append("gps_lat", String(input.gpsLat));
     if (input.gpsLon != null) form.append("gps_lon", String(input.gpsLon));
+    if (input.sourceType) form.append("source_type", input.sourceType);
+    if (input.inspectionVisitId) form.append("inspection_visit_id", input.inspectionVisitId);
     if (input.rawText) form.append("raw_text", input.rawText);
     if (input.skipQualityGate) form.append("skip_quality_gate", "true");
     return request<{ scan: Scan; quality: unknown }>("/scans", {
@@ -289,4 +300,60 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
     }),
+
+  // -------------------------------------------------------
+  // P0 Physical Verification
+  // -------------------------------------------------------
+  createPhysicalVerification: (payload: PhysicalVerificationCreate) =>
+    request<PhysicalVerification>("/physical-verifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+
+  getPhysicalVerification: (id: string) =>
+    request<PhysicalVerification>(`/physical-verifications/${id}`),
+
+  listScanVerifications: (scanId: string) =>
+    request<PhysicalVerification[]>(`/physical-verifications/scan/${scanId}`),
+
+  // -------------------------------------------------------
+  // P1 Price Anomaly Signal
+  // -------------------------------------------------------
+  getPriceSignal: (scanId: string) =>
+    request<PriceAnomaly>(`/price-signals/${scanId}`),
+
+  // -------------------------------------------------------
+  // P2 Contact Validation
+  // -------------------------------------------------------
+  getContactValidation: (scanId: string) =>
+    request<ContactValidation>(`/contact-validation/${scanId}`),
+
+  // -------------------------------------------------------
+  // P2 Multi-Unit Consistency
+  // -------------------------------------------------------
+  getConsistencyCheck: (visitId: string) =>
+    request<MultiUnitConsistency>(`/consistency-checks/${visitId}`),
+
+  // -------------------------------------------------------
+  // P2 History Signal
+  // -------------------------------------------------------
+  getHistorySignal: (entityId: string) =>
+    request<HistorySignal>(`/history-signals/${entityId}`),
+
+  // -------------------------------------------------------
+  // P2 Public Aggregate Dashboard (no auth needed)
+  // -------------------------------------------------------
+  getPublicAggregate: (district?: string, category?: string) => {
+    const params = new URLSearchParams();
+    if (district) params.set("district", district);
+    if (category) params.set("category", category);
+    const qs = params.toString();
+    // Public endpoint — request without token
+    const url = `${API_ORIGIN}/api/v1/public/aggregate${qs ? `?${qs}` : ""}`;
+    return fetch(url).then(async (res) => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return (await res.json()) as PublicAggregate;
+    });
+  },
 };
