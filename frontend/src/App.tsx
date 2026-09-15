@@ -33,6 +33,7 @@ import Scans from "./pages/Scans";
 import Settings from "./pages/Settings";
 import Team from "./pages/Team";
 import Dashboard from "./pages/Dashboard";
+import PublicDashboard from "./pages/PublicDashboard";
 import Worklist from "./pages/Worklist";
 
 // Recharts is the single heaviest dependency in the bundle; officers mostly capture
@@ -94,7 +95,21 @@ interface SidebarProps {
 function Sidebar({ lang, setLang, queueCount, online, onNavigate, onClose }: SidebarProps) {
   const { t } = useI18n();
   const { user, logout, can } = useAuth();
-  const visibleItems = NAV_ITEMS.filter((item) => !item.role || can(item.role));
+  const visible = NAV_ITEMS.filter((item) => !item.role || can(item.role));
+  // Administration leads with accounts and access; the enforcement pages follow in
+  // their usual order. Sort is stable, so everything else keeps its position.
+  const adminFirst = ["/", "/team", "/audit"];
+  const visibleItems =
+    user?.role === "admin"
+      ? [...visible].sort((a, b) => {
+          const ai = adminFirst.indexOf(a.to);
+          const bi = adminFirst.indexOf(b.to);
+          if (ai === -1 && bi === -1) return 0;
+          if (ai === -1) return 1;
+          if (bi === -1) return -1;
+          return ai - bi;
+        })
+      : visible;
 
   return (
     <>
@@ -114,10 +129,19 @@ function Sidebar({ lang, setLang, queueCount, online, onNavigate, onClose }: Sid
       </div>
 
       <div className="sidebar-primary">
-        <NavLink to="/inspect" className="btn btn-primary btn-block" onClick={onNavigate}>
-          <IconCamera size={16} />
-          {t("nav.inspect")}
-        </NavLink>
+        {/* An administrator's work starts at accounts and access, not at a label —
+            capture stays reachable from the Inspections page. */}
+        {user?.role === "admin" ? (
+          <NavLink to="/team" className="btn btn-primary btn-block" onClick={onNavigate}>
+            <IconUsers size={16} />
+            {t("nav.team")}
+          </NavLink>
+        ) : (
+          <NavLink to="/inspect" className="btn btn-primary btn-block" onClick={onNavigate}>
+            <IconCamera size={16} />
+            {t("nav.inspect")}
+          </NavLink>
+        )}
       </div>
 
       <nav className="sidebar-nav">
@@ -166,7 +190,7 @@ function Sidebar({ lang, setLang, queueCount, online, onNavigate, onClose }: Sid
 
 export default function App() {
   const { lang, setLang } = useI18n();
-  const { status } = useAuth();
+  const { status, user } = useAuth();
   const queue = useQueueStatus();
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -178,6 +202,10 @@ export default function App() {
   // Nothing in the application renders until the session is known: every screen below
   // reads case material, and a half-rendered shell behind a sign-in form invites the
   // officer to wonder which of the two they are looking at.
+  if (location.pathname === "/public-dashboard") {
+    return <PublicDashboard />;
+  }
+
   if (status === "loading") return <Loading />;
   if (status === "anonymous") return <Login />;
 
@@ -265,7 +293,7 @@ export default function App() {
         </main>
       </div>
 
-      {location.pathname !== "/inspect" && (
+      {user?.role !== "admin" && location.pathname !== "/inspect" && (
         <NavLink to="/inspect" className="fab">
           <IconPlus size={16} />
           New inspection

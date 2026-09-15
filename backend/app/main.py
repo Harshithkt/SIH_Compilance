@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.auth import bootstrap_users
 from app.config import settings
 from app.database import Base, SessionLocal, engine
-from app.routers import admin, auth, cases, evidence, rules, scans, system, worklist
+from app.routers import admin, auth, cases, evidence, physical_verifications, public, rules, scans, signals, system, worklist
 from app.schema_sync import sync_schema
 
 
@@ -46,6 +46,9 @@ app.include_router(rules.router)
 app.include_router(system.router)
 app.include_router(cases.router)
 app.include_router(admin.router)
+app.include_router(physical_verifications.router)
+app.include_router(signals.router)
+app.include_router(public.router)
 
 
 @app.get("/")

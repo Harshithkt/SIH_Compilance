@@ -138,6 +138,8 @@ class ScanOut(BaseModel):
     product_name: str | None
     is_food_item: bool
     is_imported: bool
+    source_type: str = "PHYSICAL_LABEL"
+    inspection_visit_id: str | None = None
     officer_decision: str | None
     officer_decision_by: str | None
     officer_decision_at: datetime | None
@@ -147,6 +149,7 @@ class ScanOut(BaseModel):
     entity_roles: list[EntityRoleOut] = []
     ledger_entry: LedgerEntryOut | None = None
     case: CaseOut | None = None
+    physical_verifications: list["PhysicalVerificationOut"] = []
 
 
 class ScanSummaryOut(BaseModel):
@@ -161,7 +164,10 @@ class ScanSummaryOut(BaseModel):
     product_name: str | None
     captured_at: datetime
     rule_version: str
+    source_type: str = "PHYSICAL_LABEL"
+    inspection_visit_id: str | None = None
     officer_decision: str | None
+
 
 
 class EntityOut(BaseModel):
@@ -255,3 +261,121 @@ class AuditLogOut(BaseModel):
     target_id: str | None
     detail: dict | None
     created_at: datetime
+
+
+# --- P0 Physical Verification & P1-P2 Feature Schemas ---
+
+class PhysicalVerificationCreate(BaseModel):
+    scan_id: str
+    case_id: str | None = None
+    sample_number: int = 1
+    declared_quantity: str
+    declared_unit: str
+    observed_quantity: float
+    observed_unit: str
+    notes: str | None = None
+
+
+class PhysicalVerificationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    scan_id: str
+    case_id: str | None
+    entity_id: str | None
+    sample_number: int
+    declared_quantity: str
+    declared_unit: str
+    observed_quantity: float
+    observed_unit: str
+    normalized_declared_quantity: float
+    normalized_observed_quantity: float
+    shortfall: float
+    applicable_rule_id: str
+    applicable_rule_version: str
+    applicable_mpe: float
+    tolerance_basis: str
+    result: str  # PASS | FAIL | REVIEW | NOT_ASSESSABLE
+    verification_status: str  # CONFIRMED | DRAFT
+    officer_username: str
+    timestamp: datetime
+    notes: str | None
+    calculation_details: dict | None
+    evidence_hash: str | None
+
+
+class PriceAnomalyOut(BaseModel):
+    scan_id: str
+    product_name: str | None
+    category: str | None
+    price: float | None
+    declared_quantity: str | None
+    unit_price: float | None
+    historical_avg_unit_price: float | None
+    historical_sample_count: int
+    signal: str  # NO_SIGNAL | LOW_SIGNAL | REVIEW | INSUFFICIENT_HISTORY
+    explanation: str
+    disclaimer: str = "Internal analytical signal — not a legal finding."
+
+
+class ContactValidationOut(BaseModel):
+    scan_id: str
+    phone: str | None = None
+    phone_status: str  # PASS | FAIL | NOT_ASSESSABLE
+    phone_message: str | None = None
+    email: str | None = None
+    email_status: str  # PASS | FAIL | NOT_ASSESSABLE
+    email_message: str | None = None
+    disclaimer: str = "Syntax format validation only — does not confirm working contact status."
+
+
+class MultiUnitConsistencyOut(BaseModel):
+    inspection_visit_id: str
+    unit_count: int
+    status: str  # CONSISTENT | INCONSISTENT | INSUFFICIENT_EVIDENCE
+    differing_declarations: list[dict] = []
+    explanation: str
+
+
+class HistorySignalOut(BaseModel):
+    entity_id: str
+    entity_name: str
+    total_cases: int
+    adverse_cases: int
+    repeat_count: int
+    signal_level: str  # NO_PRIOR_ADVERSE | PRIOR_ADVERSE_EXISTS | REPEAT_HISTORY_INDICATED
+    display_message: str
+    disclaimer: str = "Informational enforcement signal — not a legal determination."
+
+
+class DistrictMetric(BaseModel):
+    district: str
+    total_inspections: int
+    compliant_count: int
+    non_compliant_count: int
+    review_count: int
+    compliance_rate_percent: float
+
+
+class CategoryMetric(BaseModel):
+    category: str
+    total_inspections: int
+    compliant_count: int
+    non_compliant_count: int
+    review_count: int
+    compliance_rate_percent: float
+
+
+class PublicAggregateOut(BaseModel):
+    total_inspections: int
+    compliant_count: int
+    non_compliant_count: int
+    review_count: int
+    compliance_rate_percent: float
+    districts: list[DistrictMetric] = []
+    categories: list[CategoryMetric] = []
+    disclaimer: str = "Anonymized aggregate inspection metrics for public transparency."
+
+
+ScanOut.model_rebuild()
+

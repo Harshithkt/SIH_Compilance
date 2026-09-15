@@ -150,6 +150,18 @@ These are deliberate, and they are what keeps the claims defensible:
   mis-positioned in the docket text. This is why declarations also appear as image crops from
   the original photograph — the evidentially stronger form regardless.
 
+### 4. Field Physical Verification (Rule 22 MPE) & Enforcement Signals
+
+- **Physical Verification (Rule 22 / First Schedule)**: Field weight/volume measurements recorded by officers are evaluated directly against Legal Metrology (Packaged Commodities) Rules, Rule 22 Maximum Permissible Error (MPE) tables (mass and volume bands up to 50g: 9%, 50–100g: 4.5g, etc.). Results (`PASS`, `FAIL`, `REVIEW`, `NOT_ASSESSABLE`) are committed into the tamper-evident evidence chain.
+- **E-Commerce Screenshot Uploads**: Supports `ECOMMERCE_LISTING` image source alongside `PHYSICAL_LABEL`, preserving source context and rendering visible non-legal inspection disclaimers.
+- **Internal Price-Anomaly & History Signals**: Generates non-legal internal enforcement intelligence signals based on historical unit price distributions and prior entity adverse cases (`NO_SIGNAL`, `LOW_SIGNAL`, `REVIEW`, `INSUFFICIENT_HISTORY`). All signals are explicitly marked as informational and do not replace deterministic legal findings.
+- **Anonymized Public Transparency Dashboard**: Exposes an unauthenticated public route (`/public-dashboard`) for aggregate compliance rates and district/category breakdowns with zero PII exposure.
+
+### Roadmap vs. Current Scope
+
+- **Implemented**: Deterministic rule engine, Nebius VLM + PaddleOCR + Tesseract pipeline, SHA-256 evidence chain, BSA s.63(4) dockets, Rule 22 MPE physical verification, internal price/contact/history signals, anonymized public dashboard.
+- **Roadmap / Future Work**: Fully on-device native OCR (WebAssembly/TFLite edge execution), configurable per-field confidence thresholds for automated auto-approvals.
+
 ## Testing
 
 ```bash
